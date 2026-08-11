@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# fps — open the Forge / Pilot / Shepherd / Warden / Mentor sessions.
+#
+#   fps                  all of them, plus a plain shell, as iTerm2 tabs
+#   fps forge            one role, in a new iTerm2 tab
+#   fps forge --here     take over this shell instead of opening a tab
+#   fps code             open a VS Code workspace with a profile per role
+#   fps mine             open the project in RubyMine
+#
+# Tab order is forge, pilot, shepherd, warden, mentor, shell — roughly the
+# direction work travels, with the watcher and the teacher at the end.
+
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TAB="$SKILL_DIR/scripts/fps-tab"
+VSCODE="$SKILL_DIR/scripts/fps_vscode.py"
+ROLES=(forge pilot shepherd warden mentor shell)
+REPO="${FPS_REPO:-$HOME/Developer/workrepo/workrepo}"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: fps [role] [--here]
+       fps code [role]
+       fps mine
+
+  fps                 open every role plus a plain shell (iTerm2)
+  fps forge           open one role in a new tab
+  fps forge --here    run the role in this shell
+  fps code            open a VS Code workspace, one coloured profile per role
+  fps mine            open the project in RubyMine
+
+  roles: forge pilot shepherd warden mentor shell
+USAGE
+  exit 2
+}
+
+is_role() {
+  for r in "${ROLES[@]}"; do [ "$1" = "$r" ] && return 0; done
+  return 1
+}
+
+TARGET="iterm"
+ROLE=""
+HERE=0
+
+for arg in "$@"; do
+  case "$arg" in
+    code)   TARGET="vscode" ;;
+    mine)   TARGET="rubymine" ;;
+    --here) HERE=1 ;;
+    -h|--help) usage ;;
+    *) if is_role "$arg"; then ROLE="$arg"; else usage; fi ;;
+  esac
+done
+
+case "$TARGET" in
+  vscode)
+    [ -f "$VSCODE" ] || { echo "fps: missing $VSCODE" >&2; exit 1; }
+    exec python3 "$VSCODE" --repo "$REPO"
+    ;;
+  rubymine)
+    if ! command -v rubymine >/dev/null 2>&1; then
+      echo "fps: the 'rubymine' launcher is not on PATH." >&2
+      echo "     JetBrains Toolbox installs it under Toolbox/scripts." >&2
+      exit 1
+    fi
+    # RubyMine's terminal cannot colour its tabs — the colours elsewhere come
+    # from an iTerm escape code and a VS Code profile, neither of which it has.
+    # So this opens the project and leaves the role commands ready to paste.
+    rubymine "$REPO" >/dev/null 2>&1 &
+    echo "opened $REPO in RubyMine."
+    echo "Its terminal has no per-tab colour; start a role in any terminal tab with:"
+    for r in "${ROLES[@]}"; do
+      [ "$r" = "shell" ] && continue
+      echo "    fps $r --here"
+    done
+    exit 0
+    ;;
+esac
+
+if [ "$HERE" = "1" ]; then
+  [ -n "$ROLE" ] || usage
+  exec "$TAB" "$ROLE"
+fi
+
+if ! [ -d /Applications/iTerm.app ]; then
+  echo "iTerm2 not found. Run a role in this shell instead:" >&2
+  echo "  fps ${ROLE:-pilot} --here" >&2
+  exit 1
+fi
+
+# One AppleScript call per invocation: creating tabs one-per-call races with
+# iTerm's window creation and lands tabs in the wrong window.
+if [ -n "$ROLE" ]; then
+  osascript - "$TAB" "$ROLE" <<'APPLESCRIPT'
+on run argv
+  set tabScript to item 1 of argv
+  set roleName to item 2 of argv
+  tell application "iTerm2"
+    activate
+    if (count of windows) = 0 then
+      create window with default profile
+      tell current session of current window to write text (quoted form of tabScript & " " & roleName)
+    else
+      tell current window
+        create tab with default profile
+        tell current session to write text (quoted form of tabScript & " " & roleName)
+      end tell
+    end if
+  end tell
+end run
+APPLESCRIPT
+  exit 0
+fi
+
+osascript - "$TAB" "${ROLES[@]}" <<'APPLESCRIPT'
+on run argv
+  set tabScript to item 1 of argv
+  set roleList to items 2 thru -1 of argv
+  tell application "iTerm2"
+    activate
+    create window with default profile
+    tell current window
+      repeat with i from 1 to count of roleList
+        set roleName to item i of roleList
+        if i > 1 then create tab with default profile
+        tell current session to write text (quoted form of tabScript & " " & roleName)
+      end repeat
+      select first tab
+    end tell
+  end tell
+end run
+APPLESCRIPT

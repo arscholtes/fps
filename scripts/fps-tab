@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# fps-tab <forge|pilot|shepherd> — set up one FPS tab and hand it to Claude.
+#
+# Colours the iTerm tab, names it, moves to the role's home directory, prints a
+# short brief, then launches Claude with the role charter appended to its system
+# prompt. The charter goes in the system prompt rather than a first message so it
+# cannot scroll out of the conversation.
+
+set -euo pipefail
+
+ROLE="${1:-}"
+shift || true
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHARTER="$SKILL_DIR/charters/$ROLE.md"
+STATE="$SKILL_DIR/scripts/fps_state.py"
+
+# ---------------------------------------------------------------------------
+# PATHS — these are almost certainly wrong for you. Override them by exporting
+# any of the following in your shell profile; the defaults only suit the author.
+#
+#   export FPS_REPO=~/code/your-app          # where forge and shepherd work
+#   export FPS_PILOT_DIR=~/code/your-app     # where pilot starts (default: FPS_REPO)
+#   export FPS_DB=~/somewhere/standup.db     # open-loop database (see fps_state.py)
+#
+# A missing directory is a hard error rather than a silent `cd` to nowhere.
+# ---------------------------------------------------------------------------
+REPO="${FPS_REPO:-$HOME/Developer/workrepo/workrepo}"
+PILOT_DIR="${FPS_PILOT_DIR:-$REPO}"
+
+case "$ROLE" in
+  forge)    R=63;  G=185; B=80;  HOME_DIR="$REPO"; BLURB="build and research — draft PRs only" ;;
+  pilot)    R=47;  G=129; B=237; HOME_DIR="$PILOT_DIR"; BLURB="orientation, the day, DailyBot — no app code" ;;
+  shepherd) R=218; G=54;  B=51;  HOME_DIR="$REPO"; BLURB="review to merged — no new work" ;;
+  warden)   R=163; G=113; B=247; HOME_DIR="$REPO"; BLURB="local services and logs — reports, never fixes" ;;
+  mentor)   R=34;  G=211; B=238; HOME_DIR="$REPO"; BLURB="what is worth learning — lists first, deep dives on request" ;;
+  shell)    R=120; G=120; B=120; HOME_DIR="$REPO"; BLURB="plain shell — no session, just the repo" ;;
+  *)
+    echo "usage: fps-tab <forge|pilot|shepherd|warden|mentor|shell>" >&2
+    exit 2
+    ;;
+esac
+
+if [ "$ROLE" != "shell" ] && [ ! -f "$CHARTER" ]; then
+  echo "missing charter: $CHARTER" >&2
+  exit 1
+fi
+
+# iTerm2 tab colour + title. Harmless no-ops in other terminals.
+printf '\033]6;1;bg;red;brightness;%d\a' "$R"
+printf '\033]6;1;bg;green;brightness;%d\a' "$G"
+printf '\033]6;1;bg;blue;brightness;%d\a' "$B"
+ROLE_UPPER="$(echo "$ROLE" | tr '[:lower:]' '[:upper:]')"
+printf '\033]0;%s\a' "$ROLE_UPPER"
+
+if [ ! -d "$HOME_DIR" ]; then
+  echo "fps: no such directory: $HOME_DIR" >&2
+  echo "     Set FPS_REPO (and FPS_PILOT_DIR if pilot lives elsewhere) to your own paths." >&2
+  exit 1
+fi
+cd "$HOME_DIR"
+
+echo
+echo "  $ROLE_UPPER — $BLURB"
+echo "  $(pwd)"
+echo
+
+# A plain shell stays plain: somewhere to run a command without a wall of state
+# first. Everything below is for the sessions, which benefit from the context.
+if [ "$ROLE" = "shell" ]; then
+  exec "${SHELL:-/bin/zsh}" -l
+fi
+
+# Open loops belong to no other system, so surface them wherever you land.
+if [ -f "$STATE" ]; then
+  loops="$(python3 "$STATE" list 2>/dev/null || true)"
+  if [ -n "$loops" ] && [ "$loops" != "no open loops" ]; then
+    echo "  waiting on a person:"
+    echo "$loops" | sed 's/^/  /'
+    echo
+  fi
+fi
+
+SERVICES="$SKILL_DIR/scripts/fps_services.py"
+if [ -f "$SERVICES" ]; then
+  notices="$(python3 "$SERVICES" notices --for "$ROLE" --quiet 2>/dev/null || true)"
+  if [ -n "$notices" ]; then
+    echo "  from warden:"
+    echo "$notices" | sed 's/^/  /'
+    echo
+  fi
+fi
+
+LEARN="$SKILL_DIR/scripts/fps_learn.py"
+if [ "$ROLE" = "mentor" ] && [ -f "$LEARN" ]; then
+  echo "  queued to learn:"
+  python3 "$LEARN" list 2>/dev/null | sed 's/^/  /'
+  echo
+fi
+
+if command -v whereami >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+  whereami --no-pr 2>/dev/null | sed -n '1,4p' | sed 's/^/  /' || true
+  echo
+fi
+
+if [ "$ROLE" = "shell" ]; then
+  # Deliberately not a Claude session: somewhere to run a command without
+  # interrupting one of the five, and without a session to clean up after.
+  exec "${SHELL:-/bin/zsh}" -l
+fi
+
+# mentor gates a lesson on the human predicting an answer, and a suggested reply
+# containing that answer hands it to them — so the suggestion is off for this role
+# and left alone everywhere else.
+EXTRA=""
+if [ "$ROLE" = "mentor" ]; then
+  EXTRA="--prompt-suggestions=false"
+fi
+
+# shellcheck disable=SC2086 -- EXTRA is one optional flag or empty, never a path
+exec claude --name "$ROLE" $EXTRA --append-system-prompt-file "$CHARTER" "$@"
