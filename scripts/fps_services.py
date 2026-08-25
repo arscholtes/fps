@@ -38,7 +38,7 @@ REPO = os.path.expanduser(os.environ.get("FPS_REPO", "~/Developer/workrepo/workr
 # Ports the stack is expected to answer on. Override with FPS_PORTS="5432:postgres,..."
 DEFAULT_PORTS = "5432:postgres,6379:redis,1025:smtp-sink,8025:mail-ui"
 LOG_SCAN_BYTES = 200_000
-ROLES = ("forge", "pilot", "shepherd", "warden")
+ROLES = ("forge", "pilot", "shepherd", "warden", "mentor")
 
 
 def run(cmd, timeout=15):
