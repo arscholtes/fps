@@ -51,6 +51,18 @@ A session cannot change repo once it has started. `--repo` naming a different pr
 is an error, not a switch — otherwise a long session could quietly start writing into
 another project's queue halfway through.
 
+A repo joining for the first time can have its own notes written for it:
+
+```bash
+fps-bootstrap                  # print what it learned
+fps-bootstrap --write          # notes, plus a CLAUDE.md if the repo has none
+```
+
+It records only what it observed and lists what it could not determine as an
+explicit gap — a confident wrong answer in a CLAUDE.md is worse than a blank,
+because every session downstream acts on it. It never overwrites a CLAUDE.md
+that already exists.
+
 Optional per-repo settings go in `~/.fps/config/<slug>.json` (`pilot_dir`, `ports`),
 kept outside the target repo so an app repo that ships to a team stays clean.
 
