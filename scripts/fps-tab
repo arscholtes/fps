@@ -10,23 +10,61 @@ set -euo pipefail
 
 ROLE="${1:-}"
 shift || true
+REPO_ARG="${1:-}"
+if [ -n "$REPO_ARG" ]; then shift || true; fi
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHARTER="$SKILL_DIR/charters/$ROLE.md"
 STATE="$SKILL_DIR/scripts/fps_state.py"
 
+TENANT="$SKILL_DIR/scripts/fps_tenant.py"
+
 # ---------------------------------------------------------------------------
-# PATHS — these are almost certainly wrong for you. Override them by exporting
-# any of the following in your shell profile; the defaults only suit the author.
+# WHICH REPO — resolved once, here, and then frozen for the life of the session.
+# In order: an explicit path, $FPS_REPO, or the git root of the current shell.
+# There is no built-in default: FPS is not tied to any one project.
 #
-#   export FPS_REPO=~/code/your-app          # where forge and shepherd work
-#   export FPS_PILOT_DIR=~/code/your-app     # where pilot starts (default: FPS_REPO)
-#   export FPS_DB=~/somewhere/standup.db     # open-loop database (see fps_state.py)
-#
-# A missing directory is a hard error rather than a silent `cd` to nowhere.
+# The resolved path is exported as FPS_BOUND_REPO. Every FPS script reads that
+# and refuses a --repo which disagrees with it, so a session cannot drift into
+# another project's notice queue partway through its own life.
 # ---------------------------------------------------------------------------
-REPO="${FPS_REPO:-$HOME/Developer/workrepo/workrepo}"
-PILOT_DIR="${FPS_PILOT_DIR:-$REPO}"
+if [ -n "$REPO_ARG" ]; then
+  REPO="$REPO_ARG"
+elif [ -n "${FPS_REPO:-}" ]; then
+  REPO="$FPS_REPO"
+elif REPO="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$REPO" ]; then
+  :
+else
+  echo "fps: no repo to bind to." >&2
+  echo "     Run from inside a git repo, pass one, or export FPS_REPO." >&2
+  echo "     e.g. fps $ROLE --repo ~/code/your-app" >&2
+  exit 1
+fi
+
+if [ ! -d "$REPO" ]; then
+  echo "fps: no such directory: $REPO" >&2
+  exit 1
+fi
+REPO="$(cd "$REPO" && pwd -P)"
+export FPS_BOUND_REPO="$REPO"
+
+# Joining creates this repo's own notices/open_loops database under ~/.fps.
+# Person-scoped state (lessons, standup) stays in the one global database.
+python3 "$TENANT" join --repo "$REPO" >/dev/null 2>&1 || true
+
+# Optional per-repo settings live in ~/.fps/config/<slug>.json, never in the
+# target repo — an app repo that ships to a team is not the place for these.
+PILOT_DIR="${FPS_PILOT_DIR:-$(python3 - "$TENANT" "$REPO" <<'PYCFG'
+import json, subprocess, sys
+try:
+    cfg = json.loads(subprocess.run([sys.executable, sys.argv[1], "config", "--repo", sys.argv[2]],
+                                    capture_output=True, text=True, timeout=5).stdout or "{}")
+except Exception:
+    cfg = {}
+print(cfg.get("pilot_dir") or "")
+PYCFG
+)}"
+PILOT_DIR="${PILOT_DIR:-$REPO}"
 
 case "$ROLE" in
   forge)    R=63;  G=185; B=80;  HOME_DIR="$REPO"; BLURB="build and research — draft PRs only" ;;
@@ -36,7 +74,7 @@ case "$ROLE" in
   mentor)   R=34;  G=211; B=238; HOME_DIR="$REPO"; BLURB="what is worth learning — lists first, deep dives on request" ;;
   shell)    R=120; G=120; B=120; HOME_DIR="$REPO"; BLURB="plain shell — no session, just the repo" ;;
   *)
-    echo "usage: fps-tab <forge|pilot|shepherd|warden|mentor|shell>" >&2
+    echo "usage: fps-tab <forge|pilot|shepherd|warden|mentor|shell> [repo]" >&2
     exit 2
     ;;
 esac
@@ -63,6 +101,7 @@ cd "$HOME_DIR"
 echo
 echo "  $ROLE_UPPER — $BLURB"
 echo "  $(pwd)"
+echo "  bound to $(basename "$REPO")"
 echo
 
 # A plain shell stays plain: somewhere to run a command without a wall of state

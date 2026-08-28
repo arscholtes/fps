@@ -4,6 +4,7 @@
 #   fps                  all of them, plus a plain shell, as iTerm2 tabs
 #   fps forge            one role, in a new iTerm2 tab
 #   fps forge --here     take over this shell instead of opening a tab
+#   fps forge --repo P   bind the session to another repo
 #   fps code             open a VS Code workspace with a profile per role
 #   fps mine             open the project in RubyMine
 #
@@ -16,21 +17,27 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAB="$SKILL_DIR/scripts/fps-tab"
 VSCODE="$SKILL_DIR/scripts/fps_vscode.py"
 ROLES=(forge pilot shepherd warden mentor shell)
-REPO="${FPS_REPO:-$HOME/Developer/workrepo/workrepo}"
 
 usage() {
   cat >&2 <<'USAGE'
-usage: fps [role] [--here]
+usage: fps [role] [--here] [--repo PATH]
        fps code [role]
        fps mine
+       fps repos
 
   fps                 open every role plus a plain shell (iTerm2)
   fps forge           open one role in a new tab
   fps forge --here    run the role in this shell
+  fps forge --repo P  bind the session to repo P instead of the current one
+  fps repos           list every repo that has joined FPS
   fps code            open a VS Code workspace, one coloured profile per role
   fps mine            open the project in RubyMine
 
   roles: forge pilot shepherd warden mentor shell
+
+  With no --repo, the repo is the git root of the current directory, or
+  $FPS_REPO. It is fixed for the life of the session and cannot be changed
+  from inside it.
 USAGE
   exit 2
 }
@@ -43,18 +50,40 @@ is_role() {
 TARGET="iterm"
 ROLE=""
 HERE=0
+REPO_ARG=""
 
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     code)   TARGET="vscode" ;;
     mine)   TARGET="rubymine" ;;
+    repos)  TARGET="repos" ;;
     --here) HERE=1 ;;
+    --repo) shift; REPO_ARG="${1:-}"; [ -n "$REPO_ARG" ] || usage ;;
+    --repo=*) REPO_ARG="${1#--repo=}" ;;
     -h|--help) usage ;;
-    *) if is_role "$arg"; then ROLE="$arg"; else usage; fi ;;
+    *) if is_role "$1"; then ROLE="$1"; else usage; fi ;;
   esac
+  shift
 done
 
+# Resolved here so every downstream path agrees on one answer.
+if [ -n "$REPO_ARG" ]; then
+  REPO="$REPO_ARG"
+elif [ -n "${FPS_REPO:-}" ]; then
+  REPO="$FPS_REPO"
+else
+  REPO="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+fi
+if [ -z "$REPO" ] || [ ! -d "$REPO" ]; then
+  echo "fps: no repo to bind to — run inside a git repo, or pass --repo PATH." >&2
+  exit 1
+fi
+REPO="$(cd "$REPO" && pwd -P)"
+
 case "$TARGET" in
+  repos)
+    exec python3 "$SKILL_DIR/scripts/fps_tenant.py" list
+    ;;
   vscode)
     [ -f "$VSCODE" ] || { echo "fps: missing $VSCODE" >&2; exit 1; }
     exec python3 "$VSCODE" --repo "$REPO"
@@ -81,7 +110,7 @@ esac
 
 if [ "$HERE" = "1" ]; then
   [ -n "$ROLE" ] || usage
-  exec "$TAB" "$ROLE"
+  exec "$TAB" "$ROLE" "$REPO"
 fi
 
 if ! [ -d /Applications/iTerm.app ]; then
@@ -93,19 +122,21 @@ fi
 # One AppleScript call per invocation: creating tabs one-per-call races with
 # iTerm's window creation and lands tabs in the wrong window.
 if [ -n "$ROLE" ]; then
-  osascript - "$TAB" "$ROLE" <<'APPLESCRIPT'
+  osascript - "$TAB" "$ROLE" "$REPO" <<'APPLESCRIPT'
 on run argv
   set tabScript to item 1 of argv
   set roleName to item 2 of argv
+  set repoPath to item 3 of argv
+  set cmd to quoted form of tabScript & " " & roleName & " " & quoted form of repoPath
   tell application "iTerm2"
     activate
     if (count of windows) = 0 then
       create window with default profile
-      tell current session of current window to write text (quoted form of tabScript & " " & roleName)
+      tell current session of current window to write text cmd
     else
       tell current window
         create tab with default profile
-        tell current session to write text (quoted form of tabScript & " " & roleName)
+        tell current session to write text cmd
       end tell
     end if
   end tell
@@ -114,10 +145,11 @@ APPLESCRIPT
   exit 0
 fi
 
-osascript - "$TAB" "${ROLES[@]}" <<'APPLESCRIPT'
+osascript - "$TAB" "$REPO" "${ROLES[@]}" <<'APPLESCRIPT'
 on run argv
   set tabScript to item 1 of argv
-  set roleList to items 2 thru -1 of argv
+  set repoPath to item 2 of argv
+  set roleList to items 3 thru -1 of argv
   tell application "iTerm2"
     activate
     create window with default profile
@@ -125,7 +157,7 @@ on run argv
       repeat with i from 1 to count of roleList
         set roleName to item i of roleList
         if i > 1 then create tab with default profile
-        tell current session to write text (quoted form of tabScript & " " & roleName)
+        tell current session to write text (quoted form of tabScript & " " & roleName & " " & quoted form of repoPath)
       end repeat
       select first tab
     end tell

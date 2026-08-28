@@ -28,21 +28,36 @@ The installer writes four thin shims into `~/.local/bin` (`fps`, `fps-services`,
 `~/.claude/skills/fps` so Claude Code picks it up as a skill. Make sure
 `~/.local/bin` is on your `PATH`.
 
-## Configure
+## Which repo
 
-The defaults point at one particular machine and will be wrong for you. Override in
-your shell profile:
+FPS is not tied to any one project. A session binds to a repo when it starts, and
+that binding is fixed for the rest of its life:
 
 ```bash
-export FPS_REPO=~/code/your-app        # where forge and shepherd work
-export FPS_PILOT_DIR=~/code/your-app   # where pilot starts, if different
-export FPS_DB=~/path/to/fps.db         # open-loop + learning-queue database
+fps forge                      # the git root of the current directory
+fps forge --repo ~/code/app    # somewhere else
+fps repos                      # every repo that has joined
 ```
 
-Then create the database tables once:
+Each repo gets its own database of notices and open loops, created on first use at
+`~/.fps/dbs/<basename>-<hash>.db` — never inside the repo itself. The basename makes
+the file recognisable; the path hash keeps two checkouts sharing a basename apart.
+
+Lessons (`fps-learn`) and the standup tables stay in one global database on purpose.
+They belong to the person, not the project, and the learning queue is specifically the
+thing meant to outlive any one job.
+
+A session cannot change repo once it has started. `--repo` naming a different project
+is an error, not a switch — otherwise a long session could quietly start writing into
+another project's queue halfway through.
+
+Optional per-repo settings go in `~/.fps/config/<slug>.json` (`pilot_dir`, `ports`),
+kept outside the target repo so an app repo that ships to a team stays clean.
 
 ```bash
-fps-loops init
+export FPS_REPO=~/code/your-app        # a default when you are not inside the repo
+export FPS_PILOT_DIR=~/code/your-app   # where pilot starts, if different
+export FPS_NOTICE_TTL_DAYS=14          # how long an unacked notice is delivered
 ```
 
 ## Run

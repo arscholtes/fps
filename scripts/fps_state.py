@@ -10,7 +10,7 @@ session messaging, not here — a shared-state file that grows becomes archaeolo
 and every reported multi-agent setup that added one regretted it.
 
 Usage:
-    fps_state.py init
+    fps_state.py init [--repo PATH]
     fps_state.py add --who NAME --what TEXT [--where URL]
     fps_state.py list [--all]
     fps_state.py close ID
@@ -20,37 +20,21 @@ from __future__ import annotations
 
 import argparse
 import os
-import sqlite3
 import sys
 from datetime import datetime, timezone
 
-DEFAULT_DB = os.path.expanduser("~/Desktop/weekly_standup/daily-standup-agent/standup.db")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fps_tenant  # noqa: E402
+
 STALE_DAYS = 3
 # Past this, the list stops being read at all. Yegge's calibrated ceiling for an
 # agent-queryable working set is ~200 items; an open-loop list should never be close.
 WARN_COUNT = 25
 
 
-def connect(path):
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init(conn):
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS open_loops (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            asked_of TEXT NOT NULL,
-            question TEXT NOT NULL,
-            where_url TEXT,
-            asked_at TEXT NOT NULL,
-            resolved_at TEXT
-        )
-        """
-    )
-    conn.commit()
+def connect(repo):
+    """@return [sqlite3.Connection] the tenant database for the bound repo."""
+    return fps_tenant.connect_tenant(repo)
 
 
 def now():
@@ -110,12 +94,19 @@ def cmd_close(conn, args):
     print(f"closed {args.id}" if cur.rowcount else f"no open loop with id {args.id}")
 
 
-def main():
+def _repo_flag(parser, leading):
+    """--repo on either side of the subcommand; see fps_services for the rationale."""
+    parser.add_argument("--repo", default=None if leading else argparse.SUPPRESS,
+                        help="repo to act on; must match the session binding")
+
+
+def build_parser():
+    """@return [argparse.ArgumentParser] the fps-loops command line."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default=os.environ.get("FPS_DB", DEFAULT_DB))
+    _repo_flag(ap, leading=True)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("init")
+    p_init = sub.add_parser("init")
 
     p_add = sub.add_parser("add")
     p_add.add_argument("--who", required=True)
@@ -130,17 +121,24 @@ def main():
     p_close = sub.add_parser("close")
     p_close.add_argument("id", type=int)
 
+    for p in (p_init, p_add, p_list, p_close):
+        _repo_flag(p, leading=False)
+    return ap
+
+
+def main():
+    ap = build_parser()
     args = ap.parse_args()
 
-    if not os.path.exists(os.path.dirname(args.db)):
-        print(f"no such directory for db: {args.db}", file=sys.stderr)
+    try:
+        repo = fps_tenant.resolve_repo(args.repo)
+    except fps_tenant.RepoBindingError as exc:
+        print(f"fps: {exc}", file=sys.stderr)
         return 1
 
-    conn = connect(args.db)
-    init(conn)
-    {"init": lambda c, a: print(f"ready: {a.db}"), "add": cmd_add, "list": cmd_list, "close": cmd_close}[
-        args.cmd
-    ](conn, args)
+    conn = connect(repo)
+    {"init": lambda c, a: print(f"ready: {fps_tenant.db_path_for(repo)}"),
+     "add": cmd_add, "list": cmd_list, "close": cmd_close}[args.cmd](conn, args)
     return 0
 
 

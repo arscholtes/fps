@@ -73,7 +73,16 @@ Leave one a message, or read the ones left for you:
 ```bash
 fps-services notify --what "..." --for forge   # leave a message
 fps-services notices --for <your-role>         # read yours, at any time
+fps-services ack <id>                          # done with it — take it off the queue
 ```
+
+**Ack a notice the moment you have acted on it.** Not at the end of the session, not
+once the whole batch is done — as each one closes. An unacked notice is redelivered at
+every session start, so a queue nobody drains becomes wallpaper and then stops being
+read at all. The same goes for `fps-loops close <id>` and `fps-learn studied <id>`.
+Notices age out unacked after two weeks and stop being delivered, which is a backstop
+against the queue rotting, not permission to skip the ack — an aged-out notice is work
+that silently never happened.
 
 **There is no live channel between sessions.** You cannot ask another one a question and
 wait for an answer — nothing is listening. A message is seen when that session next starts,

@@ -87,14 +87,17 @@ def build(repo):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", default=os.path.expanduser(
-        os.environ.get("FPS_REPO", "~/Developer/workrepo/workrepo")))
+    ap.add_argument("--repo", default=None)
     ap.add_argument("--print", action="store_true", help="write nothing, just show it")
     args = ap.parse_args()
 
-    if not os.path.isdir(args.repo):
-        print(f"fps: no such directory: {args.repo}", file=sys.stderr)
-        print("     Set FPS_REPO to your own path.", file=sys.stderr)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import fps_tenant
+
+    try:
+        args.repo = fps_tenant.resolve_repo(args.repo)
+    except fps_tenant.RepoBindingError as exc:
+        print(f"fps: {exc}", file=sys.stderr)
         return 1
 
     ws = build(args.repo)

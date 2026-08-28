@@ -30,11 +30,12 @@ import shutil
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-DEFAULT_DB = os.path.expanduser(os.environ.get("FPS_DB", "~/Desktop/weekly_standup/daily-standup-agent/standup.db"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fps_tenant  # noqa: E402
+
 SESSION_DIR = os.path.expanduser("~/.claude/sessions")
-REPO = os.path.expanduser(os.environ.get("FPS_REPO", "~/Developer/workrepo/workrepo"))
 # Ports the stack is expected to answer on. Override with FPS_PORTS="5432:postgres,..."
 DEFAULT_PORTS = "5432:postgres,6379:redis,1025:smtp-sink,8025:mail-ui"
 LOG_SCAN_BYTES = 200_000
@@ -146,21 +147,9 @@ def live_sessions():
 
 # --------------------------------------------------------------------------- notices
 
-def connect(db):
-    conn = sqlite3.connect(db)
-    conn.row_factory = sqlite3.Row
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS notices (
-               id INTEGER PRIMARY KEY AUTOINCREMENT,
-               for_role TEXT,
-               severity TEXT NOT NULL DEFAULT 'warn',
-               body TEXT NOT NULL,
-               created_at TEXT NOT NULL,
-               acked_at TEXT
-           )"""
-    )
-    conn.commit()
-    return conn
+def connect(repo):
+    """@return [sqlite3.Connection] the tenant database for the bound repo."""
+    return fps_tenant.connect_tenant(repo)
 
 
 def cmd_notify(conn, args):
@@ -177,6 +166,17 @@ def cmd_notify(conn, args):
     return 0
 
 
+def _aged_out(created_at, ttl_days):
+    """@return [Boolean] whether an unacked notice has outlived its delivery window."""
+    try:
+        then = datetime.fromisoformat(created_at)
+    except (TypeError, ValueError):
+        return False
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - then > timedelta(days=ttl_days)
+
+
 def cmd_notices(conn, args):
     sql = "SELECT * FROM notices"
     params = []
@@ -187,7 +187,15 @@ def cmd_notices(conn, args):
             params.append(args.for_role)
     sql += " ORDER BY created_at ASC"
     rows = list(conn.execute(sql, params))
-    if not rows:
+
+    stale = 0
+    if not args.all:
+        ttl = fps_tenant.notice_ttl_days()
+        fresh = [r for r in rows if not _aged_out(r["created_at"], ttl)]
+        stale = len(rows) - len(fresh)
+        rows = fresh
+
+    if not rows and not stale:
         if not args.quiet:
             print("no notices")
         return 0
@@ -195,6 +203,9 @@ def cmd_notices(conn, args):
         target = r["for_role"] or "all"
         state = "acked" if r["acked_at"] else r["severity"]
         print(f"  [{r['id']:>3}] {state:>5} -> {target:<9} {r['body']}")
+    if stale and not args.quiet:
+        print(f"\n  {stale} notice(s) aged out unacked past {fps_tenant.notice_ttl_days()}d — see --all.")
+        print("  Ack a notice when you act on it; the queue is only read while it is short.")
     return 0
 
 
@@ -239,7 +250,7 @@ def cmd_status(conn, args):
     return 0
 
 
-def find_problems():
+def find_problems(repo):
     """Only things observed, never inferred. Each entry is (severity, text)."""
     problems = []
 
@@ -268,7 +279,7 @@ def find_problems():
     if len(trees) > 1:
         problems.append(("warn", f"sidekiq running for {len(trees)} worktrees: {', '.join(sorted(trees))}"))
 
-    log = os.path.join(REPO, "log", "development.log")
+    log = os.path.join(repo, "log", "development.log")
     if os.path.exists(log):
         try:
             size = os.path.getsize(log)
@@ -285,7 +296,7 @@ def find_problems():
 
 
 def cmd_problems(conn, args):
-    problems = find_problems()
+    problems = find_problems(args.repo_path)
     if not problems:
         if not args.quiet:
             print("nothing looks wrong")
@@ -305,13 +316,25 @@ def cmd_sessions(conn, args):
     return 0
 
 
-def main():
+def _repo_flag(parser, leading):
+    """--repo reads naturally on either side of the subcommand, so accept both.
+
+    Only the leading copy carries a default; the trailing one suppresses itself
+    when absent, otherwise an omitted flag after the subcommand would overwrite
+    the value given before it.
+    """
+    parser.add_argument("--repo", default=None if leading else argparse.SUPPRESS,
+                        help="repo to act on; must match the session binding")
+
+
+def build_parser():
+    """@return [argparse.ArgumentParser] the fps-services command line."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default=DEFAULT_DB)
+    _repo_flag(ap, leading=True)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("status")
-    sub.add_parser("sessions")
+    p_status = sub.add_parser("status")
+    p_sessions = sub.add_parser("sessions")
 
     p_prob = sub.add_parser("problems")
     p_prob.add_argument("--quiet", action="store_true")
@@ -329,8 +352,20 @@ def main():
     p_ack = sub.add_parser("ack")
     p_ack.add_argument("id", type=int)
 
+    for p in (p_status, p_sessions, p_prob, p_not, p_list, p_ack):
+        _repo_flag(p, leading=False)
+    return ap
+
+
+def main():
+    ap = build_parser()
     args = ap.parse_args()
-    conn = connect(args.db)
+    try:
+        args.repo_path = fps_tenant.resolve_repo(args.repo)
+    except fps_tenant.RepoBindingError as exc:
+        print(f"fps: {exc}", file=sys.stderr)
+        return 1
+    conn = connect(args.repo_path)
     return {
         "status": cmd_status, "problems": cmd_problems, "sessions": cmd_sessions,
         "notify": cmd_notify, "notices": cmd_notices, "ack": cmd_ack,
