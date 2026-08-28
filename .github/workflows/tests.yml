@@ -1,0 +1,65 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Run the test suite
+        run: python -m unittest discover -s tests -v
+
+  # The scripts promise to run on a stock python. A third-party import would make
+  # that false without anything failing, so the promise is checked rather than stated.
+  stdlib-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Refuse third-party imports
+        run: |
+          python - <<'PY'
+          import ast, pathlib, sys
+          stdlib = sys.stdlib_module_names
+          local = {p.stem for p in pathlib.Path("scripts").glob("*.py")}
+          bad = []
+          for path in list(pathlib.Path("scripts").glob("*.py")) + list(pathlib.Path("tests").glob("*.py")):
+              tree = ast.parse(path.read_text())
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      names = [a.name for a in node.names]
+                  elif isinstance(node, ast.ImportFrom):
+                      names = [node.module] if node.module and node.level == 0 else []
+                  else:
+                      continue
+                  for name in names:
+                      root = name.split(".")[0]
+                      if root not in stdlib and root not in local:
+                          bad.append(f"{path}: {name}")
+          if bad:
+              print("third-party imports found:", *bad, sep="\n  ")
+              sys.exit(1)
+          print("stdlib only — promise holds")
+          PY
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the shell scripts parse
+        run: |
+          for f in scripts/fps scripts/fps-tab install.sh; do
+            bash -n "$f" && echo "ok  $f"
+          done
