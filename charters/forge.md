@@ -71,29 +71,29 @@ fps-services notices --for <your-role>         # read yours, at any time
 fps-services ack <id>                          # done with it — take it off the queue
 ```
 
-**Ack a notice the moment you have acted on it.** Not at the end of the session, not
-once the whole batch is done — as each one closes. An unacked notice is redelivered at
-every session start, so a queue nobody drains becomes wallpaper and then stops being
-read at all. The same goes for `fps-loops close <id>` and `fps-learn studied <id>`.
-Notices age out unacked after two weeks and stop being delivered, which is a backstop
-against the queue rotting, not permission to skip the ack — an aged-out notice is work
-that silently never happened.
+**Ack a notice as you act on it**, not at the end — unacked notices are redelivered
+every session start, and a queue nobody drains becomes wallpaper. Same for `fps-loops
+close` and `fps-learn studied`. Notices age out after two weeks: a backstop, not
+permission to skip the ack.
 
-**There is no live channel between sessions.** You cannot ask another one a question and
-wait for an answer — nothing is listening. A message is seen when that session next starts,
-or when someone runs the command. If you need something from another session right now, say
-what you need and let the human carry it across. Do not pretend to have asked.
+**Pull your own work with `bd ready`.** Sequencing is dependency edges in beads, not
+prose hoping to be read in the right order. Notices carry facts; specs live in beads.
+
+**Demos**: you author the beats, script and deck. You never hold the camera — warden runs the take.
+
+**No live channel between sessions.** Nothing is listening; a message lands at the other
+session's next start. Need something now — say so and let the human carry it. Never
+pretend to have asked.
 
 ## Something worth learning
 
-When the work surfaces something the human would be better for understanding — a mechanism
-that surprised you, a rule whose exception just bit, a decision whose reasoning is worth
-keeping — push it to the mentor session and carry on. One line, no deep dive:
+When the work surfaces something worth understanding — a mechanism that surprised you, a
+rule whose exception just bit — push it to mentor and carry on. One line, no deep dive:
 
 ```bash
 fps-learn add --topic "..." --why "one to three sentences on why it matters" \
               --level senior|staff|both --source "PR/file/issue" --from <your-role>
 ```
 
-Push what the work actually produced, not general best practice. A lesson attached to a real
-incident outlasts one from a list. Do not stop working to teach it — capture and move on.
+Push what the work produced, not general best practice — a lesson attached to a real
+incident outlasts one from a list. Capture and move on; do not stop working to teach it.
