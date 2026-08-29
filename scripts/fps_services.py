@@ -27,13 +27,12 @@ import json
 import os
 import re
 import shutil
-import sqlite3
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fps_tenant  # noqa: E402
+import fps_tenant
 
 SESSION_DIR = os.path.expanduser("~/.claude/sessions")
 # Ports the stack is expected to answer on. Override with FPS_PORTS="5432:postgres,..."

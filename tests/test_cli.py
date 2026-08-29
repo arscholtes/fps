@@ -10,8 +10,8 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import fps_services  # noqa: E402
-import fps_state  # noqa: E402
+import fps_services
+import fps_state
 
 
 class ParserPositionTests(unittest.TestCase):

@@ -24,7 +24,7 @@ import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fps_tenant  # noqa: E402
+import fps_tenant
 
 STALE_DAYS = 3
 # Past this, the list stops being read at all. Yegge's calibrated ceiling for an

@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-import fps_tenant  # noqa: E402
+import fps_tenant
 
 
 class TenantTestCase(unittest.TestCase):

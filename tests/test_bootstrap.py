@@ -1,6 +1,5 @@
 """Learning a repo well enough to write down how to work in it."""
 
-import os
 import sys
 import tempfile
 import unittest
@@ -8,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-import fps_bootstrap as fb  # noqa: E402
+import fps_bootstrap as fb
 
 
 class RepoFixture(unittest.TestCase):

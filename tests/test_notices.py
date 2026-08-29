@@ -12,8 +12,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-import fps_services  # noqa: E402
-import fps_tenant  # noqa: E402
+import fps_services
+import fps_tenant
 
 
 def days_ago(n):

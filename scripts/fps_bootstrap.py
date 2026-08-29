@@ -27,7 +27,7 @@ import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fps_tenant  # noqa: E402
+import fps_tenant
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "vendor", "tmp", "log", ".idea"}
 PROMISE_PATTERNS = (
@@ -59,7 +59,7 @@ def _json(path):
 def detect_language(repo):
     """@return [Hash] {language, framework} — "unknown" rather than a guess."""
     repo = str(repo)
-    j = lambda *p: os.path.join(repo, *p)  # noqa: E731
+    j = lambda *p: os.path.join(repo, *p)
 
     if os.path.isfile(j("Gemfile")):
         gemfile = _read(j("Gemfile"))
@@ -103,7 +103,7 @@ def _has_python(repo):
 def detect_commands(repo, lang):
     """@return [Hash] {test, lint, run} — None where nothing in the repo says."""
     repo = str(repo)
-    j = lambda *p: os.path.join(repo, *p)  # noqa: E731
+    j = lambda *p: os.path.join(repo, *p)
     out = {"test": None, "lint": None, "run": None}
     language = lang["language"]
 
