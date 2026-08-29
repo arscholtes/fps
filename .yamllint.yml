@@ -1,0 +1,33 @@
+# generated from ~/.claude/shared/yamllint.yml — do not edit here.
+# Vendored so it resolves on a CI runner; the weekly audit reports drift.
+# Shared YAML rules.
+#
+# Same principle as the markdown config: keep what catches breakage, drop what
+# enforces a preference. A workflow's `uses:` and `run:` lines cannot be wrapped
+# meaningfully, so a line-length rule here only teaches people to ignore output.
+extends: default
+
+rules:
+  # CI files carry long uses:/run: lines with nowhere to break.
+  line-length: disable
+
+  # `on:` is the GitHub Actions trigger key, and every workflow would fail this.
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+
+  # A leading --- adds nothing to a single-document config file.
+  document-start: disable
+
+  # Comment formatting is a preference; comment CONTENT is not linted anyway.
+  comments:
+    min-spaces-from-content: 1
+
+  # KEPT ON PURPOSE, each because it breaks a parse or changes meaning:
+  #   key-duplicates  a repeated key silently wins and drops the other
+  #   indentation     wrong indentation reparents a block
+  #   trailing-spaces harmless in YAML, but hides diff noise
+  key-duplicates: enable
+  indentation:
+    spaces: consistent
+    indent-sequences: consistent

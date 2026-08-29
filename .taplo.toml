@@ -1,0 +1,17 @@
+# generated from ~/.claude/shared/taplo.toml — do not edit here.
+# Vendored so it resolves on a CI runner; the weekly audit reports drift.
+# Shared TOML formatting.
+#
+# taplo's defaults are close to reasonable, so this confirms them rather than
+# inventing a house style. Alignment is off deliberately: an aligned table
+# reflows every line when the longest key changes, which makes a one-line edit
+# look like a rewrite in review.
+[formatting]
+align_entries = false
+align_comments = true
+array_trailing_comma = true
+array_auto_expand = true
+compact_arrays = false
+indent_string = "  "
+reorder_keys = false          # key order in a config is often deliberate
+allowed_blank_lines = 2

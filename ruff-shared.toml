@@ -1,6 +1,5 @@
 # generated from ~/.claude/shared/ruff-strict.toml — do not edit here.
-# Vendored rather than referenced by home path so it resolves on a CI runner;
-# the weekly audit reports it if this copy drifts from the shared source.
+# Vendored so it resolves on a CI runner; the weekly audit reports drift.
 # Strict Python defaults. Extend, never copy:
 #
 #   # pyproject.toml

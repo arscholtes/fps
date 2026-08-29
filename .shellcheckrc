@@ -1,0 +1,6 @@
+# generated from ~/.claude/shared/shellcheckrc — do not edit here.
+# Vendored so it resolves on a CI runner; the weekly audit reports drift.
+# Strict shell defaults. Use with:  ln -s ~/.claude/shared/shellcheckrc .shellcheckrc
+enable=all
+# Local variables are frequently intentional in small scripts.
+disable=SC2312

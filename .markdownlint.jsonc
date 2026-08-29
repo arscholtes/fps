@@ -1,0 +1,45 @@
+// generated from ~/.claude/shared/markdownlint.jsonc — do not edit here.
+// Vendored so it resolves on a CI runner; the weekly audit reports drift.
+// Shared markdown rules.
+//
+// THE PRINCIPLE: keep a rule that catches something which RENDERS wrong; drop a
+// rule that enforces a typographic preference. A linter nobody trusts gets
+// disabled entirely, and that costs more than the rules it was enforcing.
+//
+// Measured before choosing. Across the 34 markdown files we actually own,
+// defaults produced 7,102 findings — of which 6,246 were line length and 856
+// were table pipe spacing. Neither changes what a reader sees. Turning those two
+// off leaves roughly 350 real ones: fences that will highlight wrong, lists that
+// will run into their surrounding paragraph.
+{
+  "default": true,
+
+  // Prose does not hard-wrap at 80 columns. Enforcing it would rewrap every
+  // document here and change nothing about how any of them render.
+  "MD013": false,
+
+  // Table pipe padding. Invisible once rendered, and 856 of them.
+  "MD060": false,
+
+  // Duplicate headings are normal in these documents: several skills repeat
+  // "Usage" or "Why" under different parents.
+  "MD024": { "siblings_only": true },
+
+  // Inline HTML is deliberate in the planning docs, which embed detail blocks.
+  "MD033": false,
+
+  // A document may open with a front-matter block or a badge rather than an H1.
+  "MD041": false,
+
+  // KEPT ON PURPOSE, each because it renders or behaves wrong:
+  //   MD031  a fence without surrounding blanks swallows the paragraph beside it
+  //   MD032  a list without surrounding blanks renders as one paragraph
+  //   MD040  a fence with no language gets no highlighting
+  //   MD022  a heading without blanks around it is not always parsed as one
+  //   MD010  a hard tab renders inconsistently across viewers
+  "MD031": true,
+  "MD032": true,
+  "MD040": true,
+  "MD022": true,
+  "MD010": true
+}
