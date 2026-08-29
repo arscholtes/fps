@@ -10,7 +10,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.13"]
+        # 3.14 is what this actually runs on: the scheduled jobs invoke
+        # /opt/homebrew/bin/python3, which is 3.14.7. Testing only 3.11 and
+        # 3.13 left the production version unexercised.
+        python: ["3.11", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

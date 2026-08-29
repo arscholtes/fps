@@ -1,4 +1,8 @@
+[project]
+# tomllib is 3.11+, and two scheduled jobs on this machine still invoke 3.9.
+requires-python = ">=3.11"
+
 [tool.ruff]
-# Extends the shared strict defaults rather than copying them, so a change there
-# reaches this repo with no sync step. Copying would fork it on day one.
-extend = "~/.claude/shared/ruff-strict.toml"
+# Vendored copy of the shared strict defaults: a home path does not resolve on
+# a CI runner. The weekly audit reports it if this copy drifts from the source.
+extend = "ruff-shared.toml"

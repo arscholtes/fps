@@ -1,0 +1,55 @@
+# generated from ~/.claude/shared/ruff-strict.toml — do not edit here.
+# Vendored rather than referenced by home path so it resolves on a CI runner;
+# the weekly audit reports it if this copy drifts from the shared source.
+# Strict Python defaults. Extend, never copy:
+#
+#   # pyproject.toml
+#   [tool.ruff]
+#   extend = "~/.claude/shared/ruff-strict.toml"
+#
+# Copying forks it, and a fork drifts the day it is stamped. Extending means a
+# change here reaches every repo with no sync step.
+#
+# Maximum from the first commit, metrics cops included. Strictness is nearly free
+# while code is being written to fit it and expensive to retrofit — a codebase
+# adopting a rule late generates an exclusion file worked off for years.
+# Greenfield is the only cheap moment and the window closes fast.
+
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",           # pyflakes
+    "I",           # import order
+    "B",           # bugbear — the real-bug cops
+    "C4",          # comprehensions
+    "SIM",         # simplify
+    "RET",         # returns
+    "ARG",         # unused arguments
+    "PTH",         # pathlib over os.path
+    "TRY",         # exception antipatterns
+    "C90",         # mccabe complexity
+    "PL",          # pylint, including the metrics
+    "RUF",
+]
+ignore = [
+    # Documented deliberate exceptions, each with its reason. Anything not
+    # listed here is a real finding, not a style preference.
+    "TRY003",   # long messages inline: an error a person reads beats a terse class
+    "PLR0913",  # argument count: injected fetchers push this up on purpose
+    "RET504",   # a named return value is often the clearer of the two
+]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pylint]
+max-statements = 50
+max-branches = 12
+max-returns = 6
+
+[lint.per-file-ignores]
+# Tests say the same thing many times on purpose, and that is not duplication.
+"tests/**" = ["PLR2004", "ARG001", "ARG002", "S101"]
