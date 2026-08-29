@@ -1,4 +1,6 @@
 [project]
+name = "fps"
+version = "0.1.0"
 # tomllib is 3.11+, and two scheduled jobs on this machine still invoke 3.9.
 requires-python = ">=3.11"
 
