@@ -1,0 +1,4 @@
+[tool.ruff]
+# Extends the shared strict defaults rather than copying them, so a change there
+# reaches this repo with no sync step. Copying would fork it on day one.
+extend = "~/.claude/shared/ruff-strict.toml"
