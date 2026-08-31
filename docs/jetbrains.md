@@ -84,12 +84,12 @@ Override with `FPS_IDE=rubymine` or `fps jet --ide pycharm`. Toolbox launchers a
 already on PATH: `idea`, `pycharm`, `rubymine`, `webstorm`, `datagrip`, `goland`,
 `clion`, `rider`, `dataspell`, `rustrover`, `studio`.
 
-Worked examples: workrepo → RubyMine. jobhunt, fps → PyCharm. `~/.claude` → IntelliJ.
+Worked examples: a Rails app → RubyMine. jobhunt, fps → PyCharm. `~/.claude` → IntelliJ.
 
 ## The constraint that has to be settled first
 
 Generated run configurations live in **`.idea/runConfigurations/` inside the
-target repo**. For workrepo that is a team repository, and the standing rule is
+target repo**. When that is a shared team repository, the standing rule is
 that personal tooling never lands in something that ships to the team.
 
 Options:
@@ -162,12 +162,6 @@ the iTerm path is what works when the IDE is not running.
 3. Colour versus MCP context — is the loss of coloured tabs acceptable?
 4. Does the compound configuration start all five roles, or should warden and
    mentor be opt-in? Five sessions is a lot of tokens to start by reflex.
-
-## Mirror obligation
-
-`arscholtes/fps` and `team-org/skills` (`skills/fps`) must stay identical for
-FPS content. The mirror is not cloned on this machine. This document and anything
-built from it lands in both.
 
 ---
 

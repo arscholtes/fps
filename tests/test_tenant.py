@@ -39,12 +39,12 @@ class TenantTestCase(unittest.TestCase):
 
 class SlugTests(TenantTestCase):
     def test_slug_starts_with_the_repo_basename(self):
-        repo = self.make_repo("Developer", "workrepo")
-        self.assertTrue(fps_tenant.slug_for(repo).startswith("workrepo-"))
+        repo = self.make_repo("Developer", "myapp")
+        self.assertTrue(fps_tenant.slug_for(repo).startswith("myapp-"))
 
     def test_same_basename_in_two_locations_gets_two_slugs(self):
-        a = self.make_repo("work", "workrepo")
-        b = self.make_repo("personal", "workrepo")
+        a = self.make_repo("work", "myapp")
+        b = self.make_repo("personal", "myapp")
         self.assertNotEqual(fps_tenant.slug_for(a), fps_tenant.slug_for(b))
 
     def test_slug_is_stable_across_calls(self):

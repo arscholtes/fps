@@ -74,7 +74,7 @@ def slug_for(repo):
     first so one repo can never end up owning two tenants.
 
     @param repo [String] path to the repo
-    @return [String] e.g. "workrepo-3f2a9c1b"
+    @return [String] e.g. "myapp-3f2a9c1b"
     """
     real = os.path.realpath(os.path.expanduser(repo))
     base = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(real)).strip("-") or "repo"

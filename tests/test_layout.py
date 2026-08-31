@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-import fps_layout  # noqa: E402
+import fps_layout
 
 BUILTIN = {"idx": 0, "x": 0, "y": 0, "w": 2056, "h": 1329, "main": True}
 EXTERNAL = {"idx": 1, "x": -2560, "y": 0, "w": 2560, "h": 1440, "main": False}

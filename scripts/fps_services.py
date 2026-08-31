@@ -64,8 +64,42 @@ def containers():
     return [tuple(line.split("\t", 1)) for line in out.splitlines() if "\t" in line]
 
 
-def app_processes():
-    """Puma/sidekiq/tailwind, with the worktree each belongs to where visible."""
+def worktree_from(cmd, repo_name):
+    """The worktree a process belongs to, read out of its proctitle.
+
+    A checkout named "<repo>-<branch>" is a worktree; the bare repo name is the
+    main checkout and is not. The pattern is built from the bound repo's name
+    rather than a literal, because a literal matches one repo and returns None
+    for every other — and a None worktree is indistinguishable from a main
+    checkout, so it fails silently.
+
+    @param cmd [String] the process command line
+    @param repo_name [String, nil] basename of the bound repo
+    @return [String, nil] the worktree directory name, or None
+    """
+    if not repo_name:
+        return None
+    # A worktree is a DIRECTORY named <repo>-<branch>, so the match must be a
+    # whole path segment. A bare prefix match reported "fps_services" as a
+    # worktree of "fps" because underscore is a word character.
+    #
+    # Every match, not the first: worktrees sit beside the main checkout under a
+    # parent named after the repo, so the first hit in /Developer/<repo>/<repo>-x
+    # is the bare parent, which is not a worktree.
+    pattern = rf"(?:^|[/\s]){re.escape(repo_name)}(?:-[\w.-]+)?(?=[/\s]|$)"
+    for m in re.finditer(pattern, cmd):
+        hit = m.group(0).lstrip("/ \t")
+        if hit != repo_name:
+            return hit
+    return None
+
+
+def app_processes(repo):
+    """Puma/sidekiq/tailwind, with the worktree each belongs to where visible.
+
+    @param repo [String] path of the bound repo, whose basename names its worktrees
+    """
+    repo_name = os.path.basename(os.path.realpath(repo)) if repo else ""
     code, out = run(["ps", "-Ao", "pid=,command="])
     if code != 0:
         return []
@@ -92,10 +126,7 @@ def app_processes():
         if m:
             port = m.group(1)
         # Sidekiq puts its working directory in the proctitle; puma does not.
-        wt = None
-        m2 = re.search(r"workrepo[-\w.]*", cmd)
-        if m2 and m2.group(0) != "workrepo":
-            wt = m2.group(0)
+        wt = worktree_from(cmd, repo_name)
         found.append({"pid": pid, "kind": kind, "port": port, "worktree": wt})
     return found
 
@@ -235,7 +266,7 @@ def cmd_status(conn, args):
         print(f"  {port:<6} {label:<12} {'listening' if listening(port) else 'DOWN'}")
 
     print("\napp processes")
-    procs = app_processes()
+    procs = app_processes(args.repo_path)
     if not procs:
         print("  none")
     for p in procs:
@@ -263,7 +294,7 @@ def find_problems(repo):
         if not listening(port):
             problems.append(("error", f"{label} is not listening on {port}"))
 
-    procs = app_processes()
+    procs = app_processes(repo)
     ports_seen = {}
     for p in procs:
         if p["port"]:
