@@ -13,3 +13,6 @@ __pycache__/
 *.pre-*
 *~
 *.swp
+
+# Issue tracker: contains owner email and cross-repo references.
+.beads/
