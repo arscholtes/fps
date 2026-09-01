@@ -29,7 +29,27 @@ DEFAULT_DB = os.path.expanduser(
 )
 LEVELS = ("senior", "staff", "both")
 # A queue nobody can face is a queue nobody reads. Warn before it gets there.
-WARN_COUNT = 20
+LIBRARY_NOTE_FROM = 20
+
+
+def size_note(n):
+    """How big the library is, stated as a fact and never as a debt.
+
+    This replaced a warning that said the list stops getting read past a
+    threshold and told him to drop what he would not study. That sentence made a
+    reference feel like a backlog, and pointed at deleting the best material:
+    of the ten most employer-looking entries, eight were general SQL, Rails and
+    security lessons that merely happened to surface at work.
+
+    Nothing is ever pruned, so there is no number at which the right response is
+    to remove something.
+
+    @param n [Integer] lessons held
+    @return [String] "" when the size is not worth mentioning
+    """
+    if n < LIBRARY_NOTE_FROM:
+        return ""
+    return f"{n} lessons held — searchable with `fps-learn search <terms>`."
 
 
 def now():
@@ -98,10 +118,46 @@ def cmd_list(conn, args):
         mark = "done" if r["studied_at"] else f"{age_days(r['created_at'])}d"
         src = f"  ({r['added_by']})" if r["added_by"] else ""
         print(f"  [{r['id']:>3}] {mark:>5}  {r['level']:<6} {r['topic']}{src}")
-    open_count = sum(1 for r in rows if not r["studied_at"])
-    if open_count > WARN_COUNT:
-        print(f"\n  {open_count} queued — past this many the list stops getting read.")
-        print("  Drop what you are honestly never going to study.")
+    note = size_note(len(rows))
+    if note:
+        print(f"\n  {note}")
+    return 0
+
+
+def search(conn, terms):
+    """Lessons matching every-or-any term, best first.
+
+    Retrieval at read time is the substitute for tagging at capture time —
+    categorising as things arrive is what kills these queues. A title match
+    outranks a body match because the title is what was being named.
+
+    Studied lessons are included: studied means "worked through", not "gone".
+
+    @param terms [Array<String>] search words, case-insensitive
+    @return [Array<Row>] ranked, highest score first
+    """
+    words = [t.lower() for t in terms if t.strip()]
+    if not words:
+        return []
+    scored = []
+    for row in conn.execute("SELECT * FROM lessons"):
+        topic = (row["topic"] or "").lower()
+        body = " ".join(str(row[f] or "").lower() for f in ("why", "source", "level"))
+        score = sum(3 for w in words if w in topic) + sum(1 for w in words if w in body)
+        if score:
+            scored.append((score, -row["id"], row))
+    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return [row for _, _, row in scored]
+
+
+def cmd_search(conn, args):
+    rows = search(conn, args.terms)
+    if not rows:
+        print(f"no lesson matches {' '.join(args.terms)}")
+        return 0
+    for r in rows:
+        mark = "studied" if r["studied_at"] else f"{age_days(r['created_at'])}d"
+        print(f"  [{r['id']:>3}] {mark:>7}  {r['level']:<6} {r['topic']}")
     return 0
 
 
@@ -130,16 +186,32 @@ def cmd_studied(conn, args):
 
 
 def cmd_drop(conn, args):
+    """Remove a bad capture. NOT a pruning tool.
+
+    The library is append-only: nothing is removed to make the count smaller,
+    and no command or output proposes it. This survives only for a genuine
+    mistake at capture time — a typo, a duplicate — and demands an explicit flag
+    so it can never be reached by habit.
+    """
+    if not getattr(args, "mistake", False):
+        print("lessons are append-only; nothing is removed to shrink the list.")
+        print("if this was a bad capture, re-run with --mistake.")
+        return 1
     cur = conn.execute("DELETE FROM lessons WHERE id = ?", (args.id,))
     conn.commit()
-    print(f"dropped {args.id}" if cur.rowcount else f"no lesson with id {args.id}")
+    print(f"removed bad capture {args.id}" if cur.rowcount else f"no lesson with id {args.id}")
     return 0
 
 
-def main():
+def build_parser():
+    """@return [ArgumentParser] the CLI surface. `drop` is deliberately absent
+    from help: an escape hatch that is advertised becomes a habit."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=DEFAULT_DB)
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    # metavar is set explicitly so `drop` stays out of the listing: argparse
+    # prints every subparser name in the choices line, help=SUPPRESS or not.
+    sub = ap.add_subparsers(dest="cmd", required=True,
+                            metavar="{add,list,search,show,studied}")
 
     p_add = sub.add_parser("add")
     p_add.add_argument("--topic", required=True)
@@ -152,13 +224,24 @@ def main():
     p_list.add_argument("--all", action="store_true")
     p_list.add_argument("--level", default=None)
 
-    for name in ("show", "studied", "drop"):
+    p_search = sub.add_parser("search", help="find lessons by term")
+    p_search.add_argument("terms", nargs="+")
+
+    for name in ("show", "studied"):
         p = sub.add_parser(name)
         p.add_argument("id", type=int)
 
+    p_drop = sub.add_parser("drop")
+    p_drop.add_argument("id", type=int)
+    p_drop.add_argument("--mistake", action="store_true")
+    return ap
+
+
+def main():
+    ap = build_parser()
     args = ap.parse_args()
     conn = connect(args.db)
-    return {"add": cmd_add, "list": cmd_list, "show": cmd_show,
+    return {"add": cmd_add, "list": cmd_list, "show": cmd_show, "search": cmd_search,
             "studied": cmd_studied, "drop": cmd_drop}[args.cmd](conn, args)
 
 
