@@ -19,7 +19,7 @@ class TenantTestCase(unittest.TestCase):
         self._saved = {k: os.environ.get(k) for k in
                        ("FPS_HOME", "FPS_BOUND_REPO", "FPS_REPO", "FPS_NOTICE_TTL_DAYS")}
         self._tmp = tempfile.TemporaryDirectory()
-        os.environ["FPS_HOME"] = os.path.join(self._tmp.name, "fpshome")
+        os.environ["FPS_HOME"] = str(Path(self._tmp.name) / "fpshome")
         for k in ("FPS_BOUND_REPO", "FPS_REPO", "FPS_NOTICE_TTL_DAYS"):
             os.environ.pop(k, None)
 
@@ -32,8 +32,8 @@ class TenantTestCase(unittest.TestCase):
         self._tmp.cleanup()
 
     def make_repo(self, *parts):
-        path = os.path.join(self._tmp.name, *parts)
-        os.makedirs(path, exist_ok=True)
+        path = str(Path(self._tmp.name).joinpath(*parts))
+        Path(path).mkdir(parents=True, exist_ok=True)
         return path
 
 
@@ -53,7 +53,7 @@ class SlugTests(TenantTestCase):
 
     def test_trailing_slash_and_dot_segments_resolve_to_one_slug(self):
         repo = self.make_repo("fps")
-        noisy = os.path.join(repo, ".", "")
+        noisy = str(repo) + "/./"
         self.assertEqual(fps_tenant.slug_for(repo), fps_tenant.slug_for(noisy))
 
     def test_slug_is_filesystem_safe(self):
@@ -67,8 +67,8 @@ class DbPathTests(TenantTestCase):
     def test_tenant_db_lives_under_fps_home_never_inside_the_repo(self):
         repo = self.make_repo("someproject")
         db = fps_tenant.db_path_for(repo)
-        self.assertTrue(db.startswith(os.environ["FPS_HOME"]))
-        self.assertFalse(db.startswith(repo))
+        self.assertTrue(db.is_relative_to(Path(os.environ["FPS_HOME"])))
+        self.assertFalse(db.is_relative_to(Path(repo)))
 
     def test_global_db_is_not_the_tenant_db(self):
         repo = self.make_repo("someproject")
@@ -99,13 +99,13 @@ class ResolveTests(TenantTestCase):
 
     def test_missing_directory_is_an_error_rather_than_a_silent_tenant(self):
         with self.assertRaises(fps_tenant.RepoBindingError):
-            fps_tenant.resolve_repo(explicit=os.path.join(self._tmp.name, "nope"))
+            fps_tenant.resolve_repo(explicit=str(Path(self._tmp.name) / "nope"))
 
     def test_resolution_never_falls_back_to_cwd_when_bound(self):
         bound = self.make_repo("bound")
         elsewhere = self.make_repo("elsewhere")
         os.environ["FPS_BOUND_REPO"] = bound
-        cwd = os.getcwd()
+        cwd = str(Path.cwd())
         try:
             os.chdir(elsewhere)
             self.assertEqual(fps_tenant.resolve_repo(), os.path.realpath(bound))
@@ -143,9 +143,9 @@ class TenantConnectionTests(TenantTestCase):
     def test_connecting_creates_the_db_file_on_first_use(self):
         repo = self.make_repo("fresh")
         db = fps_tenant.db_path_for(repo)
-        self.assertFalse(os.path.exists(db))
+        self.assertFalse(Path(db).exists())
         fps_tenant.connect_tenant(repo).close()
-        self.assertTrue(os.path.exists(db))
+        self.assertTrue(Path(db).exists())
 
     def test_tenant_db_carries_the_sharded_tables(self):
         repo = self.make_repo("fresh")
@@ -188,18 +188,18 @@ class ConfigTests(TenantTestCase):
     def test_config_is_read_from_fps_home_not_from_inside_the_repo(self):
         repo = self.make_repo("configured")
         path = fps_tenant.config_path_for(repo)
-        self.assertTrue(path.startswith(os.environ["FPS_HOME"]))
-        self.assertFalse(path.startswith(repo))
+        self.assertTrue(path.is_relative_to(Path(os.environ["FPS_HOME"])))
+        self.assertFalse(path.is_relative_to(Path(repo)))
 
     def test_config_values_are_returned(self):
         repo = self.make_repo("configured")
-        os.makedirs(os.path.dirname(fps_tenant.config_path_for(repo)), exist_ok=True)
+        fps_tenant.config_path_for(repo).parent.mkdir(parents=True, exist_ok=True)
         Path(fps_tenant.config_path_for(repo)).write_text(json.dumps({"ports": "3000:web"}))
         self.assertEqual(fps_tenant.config_for(repo)["ports"], "3000:web")
 
     def test_a_corrupt_config_degrades_to_empty_rather_than_crashing(self):
         repo = self.make_repo("configured")
-        os.makedirs(os.path.dirname(fps_tenant.config_path_for(repo)), exist_ok=True)
+        fps_tenant.config_path_for(repo).parent.mkdir(parents=True, exist_ok=True)
         Path(fps_tenant.config_path_for(repo)).write_text("{ not json")
         self.assertEqual(fps_tenant.config_for(repo), {})
 

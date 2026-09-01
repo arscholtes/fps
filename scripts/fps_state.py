@@ -22,8 +22,9 @@ import argparse
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fps_tenant
 
 STALE_DAYS = 3

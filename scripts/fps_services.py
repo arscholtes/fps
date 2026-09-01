@@ -30,11 +30,12 @@ import shutil
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fps_tenant
 
-SESSION_DIR = os.path.expanduser("~/.claude/sessions")
+SESSION_DIR = Path("~/.claude/sessions").expanduser()
 # Ports the stack is expected to answer on. Override with FPS_PORTS="5432:postgres,..."
 DEFAULT_PORTS = "5432:postgres,6379:redis,1025:smtp-sink,8025:mail-ui"
 LOG_SCAN_BYTES = 200_000
@@ -99,7 +100,7 @@ def app_processes(repo):
 
     @param repo [String] path of the bound repo, whose basename names its worktrees
     """
-    repo_name = os.path.basename(os.path.realpath(repo)) if repo else ""
+    repo_name = Path(repo).resolve().name if repo else ""
     code, out = run(["ps", "-Ao", "pid=,command="])
     if code != 0:
         return []
@@ -154,9 +155,10 @@ def live_sessions():
     """Claude sessions currently running. Session files are not reaped, so a
     file only counts when its pid is still alive."""
     out = []
-    for path in glob.glob(os.path.join(SESSION_DIR, "*.json")):
+    for path in sorted(SESSION_DIR.glob("*.json")):
         try:
-            d = json.load(open(path))
+            with path.open() as fh:
+                d = json.load(fh)
         except (OSError, json.JSONDecodeError):
             continue
         pid = d.get("pid")
@@ -276,7 +278,7 @@ def cmd_status(conn, args):
 
     print("\nclaude sessions")
     for s in live_sessions():
-        print(f"  {s['name'][:34]:<36} pid {s['pid']:<7} {os.path.basename(s['cwd'])}")
+        print(f"  {s['name'][:34]:<36} pid {s['pid']:<7} {Path(s['cwd']).name}")
     return 0
 
 
@@ -309,11 +311,11 @@ def find_problems(repo):
     if len(trees) > 1:
         problems.append(("warn", f"sidekiq running for {len(trees)} worktrees: {', '.join(sorted(trees))}"))
 
-    log = os.path.join(repo, "log", "development.log")
-    if os.path.exists(log):
+    log = Path(repo) / "log" / "development.log"
+    if log.exists():
         try:
-            size = os.path.getsize(log)
-            with open(log, "rb") as fh:
+            size = log.stat().st_size
+            with log.open("rb") as fh:
                 fh.seek(max(0, size - LOG_SCAN_BYTES))
                 tail = fh.read().decode("utf-8", "replace")
             fatals = re.findall(r"^.*(?:FATAL|Error during|undefined method|PG::\w+Error).*$", tail, re.M)

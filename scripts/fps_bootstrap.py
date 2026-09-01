@@ -25,8 +25,9 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fps_tenant
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "vendor", "tmp", "log", ".idea"}
@@ -41,7 +42,7 @@ PROMISE_PATTERNS = (
 
 def _read(path, limit=200_000):
     try:
-        with open(path, encoding="utf-8", errors="replace") as fh:
+        with Path(path).open(encoding="utf-8", errors="replace") as fh:
             return fh.read(limit)
     except OSError:
         return ""
@@ -59,20 +60,22 @@ def _json(path):
 def detect_language(repo):
     """@return [Hash] {language, framework} — "unknown" rather than a guess."""
     repo = str(repo)
-    j = lambda *p: os.path.join(repo, *p)
+    def j(*p):
+        return Path(repo).joinpath(*p)
 
-    if os.path.isfile(j("Gemfile")):
+
+    if j("Gemfile").is_file():
         gemfile = _read(j("Gemfile"))
-        framework = "rails" if "rails" in gemfile and os.path.isdir(j("config")) else None
+        framework = "rails" if "rails" in gemfile and j("config").is_dir() else None
         return {"language": "ruby", "framework": framework}
-    if os.path.isfile(j("package.json")):
+    if j("package.json").is_file():
         pkg = _json(j("package.json"))
         deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
         framework = next((f for f in ("next", "react", "vue", "svelte", "express") if f in deps), None)
         return {"language": "node", "framework": framework}
-    if os.path.isfile(j("Package.swift")) or any(n.endswith(".xcodeproj") for n in _listdir(repo)):
+    if j("Package.swift").is_file() or any(n.endswith(".xcodeproj") for n in _listdir(repo)):
         return {"language": "swift", "framework": None}
-    if os.path.isfile(j("go.mod")):
+    if j("go.mod").is_file():
         return {"language": "go", "framework": None}
     if _has_python(repo):
         return {"language": "python", "framework": None}
@@ -81,7 +84,7 @@ def detect_language(repo):
 
 def _listdir(repo):
     try:
-        return os.listdir(repo)
+        return [c.name for c in Path(repo).iterdir()]
     except OSError:
         return []
 
@@ -90,10 +93,10 @@ def _has_python(repo):
     for name in _listdir(repo):
         if name.endswith(".py"):
             return True
-        sub = os.path.join(repo, name)
-        if name not in SKIP_DIRS and os.path.isdir(sub):
+        sub = Path(repo) / name
+        if name not in SKIP_DIRS and sub.is_dir():
             try:
-                if any(f.endswith(".py") for f in os.listdir(sub)):
+                if any(f.suffix == ".py" for f in sub.iterdir()):
                     return True
             except OSError:
                 continue
@@ -103,25 +106,27 @@ def _has_python(repo):
 def detect_commands(repo, lang):
     """@return [Hash] {test, lint, run} — None where nothing in the repo says."""
     repo = str(repo)
-    j = lambda *p: os.path.join(repo, *p)
+    def j(*p):
+        return Path(repo).joinpath(*p)
+
     out = {"test": None, "lint": None, "run": None}
     language = lang["language"]
 
     if language == "python":
-        if os.path.isdir(j("tests")):
+        if j("tests").is_dir():
             out["test"] = "python3 -m unittest discover -s tests"
-        if os.path.isfile(j("pyproject.toml")) and "ruff" in _read(j("pyproject.toml")):
+        if j("pyproject.toml").is_file() and "ruff" in _read(j("pyproject.toml")):
             out["lint"] = "ruff check ."
-        for pkg in (os.path.basename(repo), "src"):
-            if os.path.isfile(j(pkg, "cli.py")) and os.path.isfile(j(pkg, "__init__.py")):
+        for pkg in (Path(repo).name, "src"):
+            if j(pkg, "cli.py").is_file() and j(pkg, "__init__.py").is_file():
                 out["run"] = f"python3 -m {pkg}.cli --help"
                 break
     elif language == "ruby":
-        if os.path.isdir(j("spec")):
+        if j("spec").is_dir():
             out["test"] = "bundle exec rspec"
-        elif os.path.isdir(j("test")):
+        elif j("test").is_dir():
             out["test"] = "bundle exec rake test"
-        if os.path.isfile(j(".rubocop.yml")):
+        if j(".rubocop.yml").is_file():
             out["lint"] = "bundle exec rubocop"
         if lang["framework"] == "rails":
             out["run"] = "bin/rails server"
@@ -136,7 +141,7 @@ def detect_commands(repo, lang):
         elif "start" in scripts:
             out["run"] = "npm start"
     elif language == "swift":
-        if os.path.isfile(j("Package.swift")):
+        if j("Package.swift").is_file():
             out["test"] = "swift test"
             out["run"] = "swift run"
     elif language == "go":
@@ -152,8 +157,8 @@ def detect_layout(repo):
     for name in sorted(_listdir(repo)):
         if name.startswith(".") or name in SKIP_DIRS:
             continue
-        path = os.path.join(repo, name)
-        if not os.path.isdir(path):
+        path = Path(repo) / name
+        if not Path(path).is_dir():
             continue
         count = 0
         for _, dirs, files in os.walk(path):
@@ -167,8 +172,8 @@ def detect_promises(repo):
     """@return [Array<String>] promises the README makes that code could break."""
     repo = str(repo)
     for candidate in ("README.md", "readme.md", "README"):
-        path = os.path.join(repo, candidate)
-        if os.path.isfile(path):
+        path = Path(repo) / candidate
+        if Path(path).is_file():
             text = _read(path).lower()
             return sorted({label for needle, label in PROMISE_PATTERNS if needle in text})
     return []
@@ -203,7 +208,7 @@ def learn(repo):
     lang = detect_language(repo)
     return {
         "repo": repo,
-        "name": os.path.basename(repo.rstrip("/")),
+        "name": Path(repo.rstrip("/")).name,
         "language": lang,
         "commands": detect_commands(repo, lang),
         "layout": detect_layout(repo),
@@ -299,20 +304,20 @@ def write_out(repo, facts, write_repo_file=False):
     @return [Hash] {notes, claude_md} — paths written, or None where skipped
     """
     repo = str(repo)
-    notes_dir = os.path.join(fps_tenant.home(), "notes", fps_tenant.slug_for(repo))
-    os.makedirs(notes_dir, exist_ok=True)
-    notes = os.path.join(notes_dir, "repo.md")
+    notes_dir = fps_tenant.home() / "notes" / fps_tenant.slug_for(repo)
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    notes = notes_dir / "repo.md"
     body = render(facts)
-    with open(notes, "w") as fh:
+    with notes.open("w") as fh:
         fh.write(body)
 
     written = None
     if write_repo_file:
-        target = os.path.join(repo, "CLAUDE.md")
+        target = Path(repo) / "CLAUDE.md"
         # Never clobber a hand-written one: this draft is a starting point, and the
         # existing file is somebody's considered answer.
-        if not os.path.exists(target):
-            with open(target, "w") as fh:
+        if not Path(target).exists():
+            with target.open("w") as fh:
                 fh.write(body)
             written = target
     return {"notes": notes, "claude_md": written}

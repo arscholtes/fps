@@ -35,6 +35,7 @@ import re
 import sqlite3
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 # The person-scoped database. A launchd job (standup-morning-doc.sh) reads this
 # path directly, so it is not ours to move.
@@ -55,15 +56,15 @@ class RepoBindingError(Exception):
 
 def home():
     """@return [String] the FPS state directory, outside every target repo."""
-    return os.path.expanduser(os.environ.get("FPS_HOME", DEFAULT_HOME))
+    return Path(os.environ.get("FPS_HOME", DEFAULT_HOME)).expanduser()
 
 
 def registry_path():
-    return os.path.join(home(), "repos.json")
+    return home() / "repos.json"
 
 
 def global_db_path():
-    return os.path.expanduser(os.environ.get("FPS_GLOBAL_DB", GLOBAL_DB))
+    return Path(os.environ.get("FPS_GLOBAL_DB", GLOBAL_DB)).expanduser()
 
 
 def slug_for(repo):
@@ -76,15 +77,16 @@ def slug_for(repo):
     @param repo [String] path to the repo
     @return [String] e.g. "myapp-3f2a9c1b"
     """
-    real = os.path.realpath(os.path.expanduser(repo))
-    base = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(real)).strip("-") or "repo"
+    resolved = Path(repo).expanduser().resolve()
+    real = str(resolved)
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", resolved.name).strip("-") or "repo"
     digest = hashlib.sha256(real.encode("utf-8")).hexdigest()[:SLUG_HASH_LEN]
     return f"{base}-{digest}"
 
 
 def config_path_for(repo):
     """@return [String] optional per-repo settings, kept outside the repo itself."""
-    return os.path.join(home(), "config", f"{slug_for(repo)}.json")
+    return home() / "config" / f"{slug_for(repo)}.json"
 
 
 def config_for(repo):
@@ -94,7 +96,7 @@ def config_for(repo):
     @return [Hash]
     """
     try:
-        with open(config_path_for(repo)) as fh:
+        with config_path_for(repo).open() as fh:
             data = json.load(fh)
     except (OSError, json.JSONDecodeError, ValueError):
         return {}
@@ -103,7 +105,7 @@ def config_for(repo):
 
 def db_path_for(repo):
     """@return [String] the tenant database for a repo, under FPS home."""
-    return os.path.join(home(), "dbs", f"{slug_for(repo)}.db")
+    return home() / "dbs" / f"{slug_for(repo)}.db"
 
 
 # --------------------------------------------------------------------------- binding
@@ -117,10 +119,10 @@ def resolve_repo(explicit=None):
     @return [String] the real path of the bound repo
     """
     bound = os.environ.get("FPS_BOUND_REPO") or ""
-    bound = os.path.realpath(os.path.expanduser(bound)) if bound else ""
+    bound = str(Path(bound).expanduser().resolve()) if bound else ""
 
     if explicit:
-        chosen = os.path.realpath(os.path.expanduser(explicit))
+        chosen = str(Path(explicit).expanduser().resolve())
         if bound and chosen != bound:
             raise RepoBindingError(
                 f"this session is bound to {bound}; it cannot act on {chosen}.\n"
@@ -129,10 +131,9 @@ def resolve_repo(explicit=None):
     elif bound:
         chosen = bound
     else:
-        chosen = os.path.realpath(os.path.expanduser(
-            os.environ.get("FPS_REPO") or os.getcwd()))
+        chosen = str(Path(os.environ.get("FPS_REPO") or Path.cwd()).expanduser().resolve())
 
-    if not os.path.isdir(chosen):
+    if not Path(chosen).is_dir():
         raise RepoBindingError(f"no such directory: {chosen}")
     return chosen
 
@@ -142,7 +143,7 @@ def resolve_repo(explicit=None):
 def list_repos():
     """@return [Array<Hash>] every joined repo, oldest first; empty if unreadable."""
     try:
-        with open(registry_path()) as fh:
+        with registry_path().open() as fh:
             data = json.load(fh)
     except (OSError, json.JSONDecodeError, ValueError):
         return []
@@ -158,11 +159,11 @@ def join(repo):
     @param repo [String] path to the repo
     @return [String] the tenant database path
     """
-    real = os.path.realpath(os.path.expanduser(repo))
-    os.makedirs(os.path.join(home(), "dbs"), exist_ok=True)
+    real = str(Path(repo).expanduser().resolve())
+    (home() / "dbs").mkdir(parents=True, exist_ok=True)
 
     try:
-        with open(registry_path()) as fh:
+        with registry_path().open() as fh:
             data = json.load(fh)
         if not isinstance(data, dict):
             data = {}
@@ -172,10 +173,10 @@ def join(repo):
     slug = slug_for(real)
     if slug not in data:
         data[slug] = {"path": real, "joined_at": _now()}
-        tmp = registry_path() + ".tmp"
-        with open(tmp, "w") as fh:
+        tmp = registry_path().with_name(registry_path().name + ".tmp")
+        with tmp.open("w") as fh:
             json.dump(data, fh, indent=2, sort_keys=True)
-        os.replace(tmp, registry_path())
+        tmp.replace(registry_path())
     return db_path_for(real)
 
 
@@ -248,7 +249,7 @@ def migrate_from_global(repo):
     @return [Hash] {table => rows copied}
     """
     src_path = global_db_path()
-    if not os.path.exists(src_path):
+    if not Path(src_path).exists():
         return {"notices": 0, "open_loops": 0}
 
     src = sqlite3.connect(src_path)

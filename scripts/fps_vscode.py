@@ -23,6 +23,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 # VS Code accepts theme colour ids, not RGB, so these are the nearest ansi
 # equivalents of the iTerm tab colours.
@@ -35,7 +36,7 @@ ROLES = [
     ("shell",    None,                   "terminal"),
 ]
 
-WORKSPACE = os.path.expanduser("~/.fps/fps.code-workspace")
+WORKSPACE = Path("~/.fps/fps.code-workspace").expanduser()
 
 
 def build(repo):
@@ -91,7 +92,7 @@ def main():
     ap.add_argument("--print", action="store_true", help="write nothing, just show it")
     args = ap.parse_args()
 
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     import fps_tenant
 
     try:
@@ -105,8 +106,8 @@ def main():
         print(json.dumps(ws, indent=2))
         return 0
 
-    os.makedirs(os.path.dirname(WORKSPACE), exist_ok=True)
-    with open(WORKSPACE, "w") as fh:
+    WORKSPACE.parent.mkdir(parents=True, exist_ok=True)
+    with WORKSPACE.open("w") as fh:
         json.dump(ws, fh, indent=2)
         fh.write("\n")
 
@@ -117,7 +118,7 @@ def main():
         return 0
 
     subprocess.run([code, "-n", WORKSPACE])
-    print(f"opened {os.path.basename(WORKSPACE)} in VS Code")
+    print(f"opened {WORKSPACE.name} in VS Code")
     print("Allow automatic tasks when asked — that is what opens the role terminals.")
     print("The terminal dropdown also has one profile per role, for opening one by hand.")
     return 0

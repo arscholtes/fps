@@ -23,10 +23,11 @@ import sqlite3
 import sys
 import textwrap
 from datetime import datetime, timezone
+from pathlib import Path
 
-DEFAULT_DB = os.path.expanduser(
+DEFAULT_DB = Path(
     os.environ.get("FPS_DB", "~/Desktop/weekly_standup/daily-standup-agent/standup.db")
-)
+).expanduser()
 LEVELS = ("senior", "staff", "both")
 # A queue nobody can face is a queue nobody reads. Warn before it gets there.
 LIBRARY_NOTE_FROM = 20

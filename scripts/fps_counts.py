@@ -23,11 +23,12 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 ROLES = ("forge", "pilot", "shepherd", "warden", "mentor")
 STALE_AFTER = 60.0
 BD_TIMEOUT = 5.0
-SNAPSHOT_DIR = os.path.expanduser("~/.local/share/fps")
+SNAPSHOT_DIR = Path("~/.local/share/fps").expanduser()
 
 
 def snapshot_path(repo):
@@ -38,8 +39,8 @@ def snapshot_path(repo):
     @return [String] path to that repo's snapshot
     """
     tenant = _tenant()
-    slug = tenant.slug_for(repo) if tenant else os.path.basename(os.path.realpath(repo))
-    return os.path.join(SNAPSHOT_DIR, f"counts-{slug}.json")
+    slug = tenant.slug_for(repo) if tenant else Path(repo).resolve().name
+    return SNAPSHOT_DIR / f"counts-{slug}.json"
 
 
 def green_counts(ready):
@@ -181,8 +182,8 @@ def _loops(repo):
 
 def _tenant():
     for d in ("~/Developer/fps/scripts", "~/.claude/skills/fps/scripts"):
-        path = os.path.expanduser(d)
-        if os.path.exists(os.path.join(path, "fps_tenant.py")):
+        path = Path(d).expanduser()
+        if (path / "fps_tenant.py").exists():
             if path not in sys.path:
                 sys.path.insert(0, path)
             try:
@@ -199,20 +200,20 @@ def write_snapshot(repo, path=None):
     ready, gates, loops = fetch(repo)
     snap = snapshot(ready, gates, loops)
     snap["repo"] = repo
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = f"{path}.tmp"
-    with open(tmp, "w") as fh:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w") as fh:
         json.dump(snap, fh)
-    os.replace(tmp, path)          # atomic: a reader never sees a half-written file
+    tmp.replace(path)          # atomic: a reader never sees a half-written file
     return snap
 
 
 def read_snapshot(repo=None, path=None):
     """@return [Hash, nil] this repo's last snapshot, or None if never written."""
     if path is None:
-        path = snapshot_path(repo or os.environ.get("FPS_BOUND_REPO") or os.getcwd())
+        path = snapshot_path(repo or os.environ.get("FPS_BOUND_REPO") or Path.cwd())
     try:
-        with open(path) as fh:
+        with Path(path).open() as fh:
             return json.load(fh)
     except (OSError, json.JSONDecodeError):
         return None
@@ -258,16 +259,16 @@ def _render_list(snap, role=None):
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    repo = os.environ.get("FPS_BOUND_REPO") or os.getcwd()
+    repo = os.environ.get("FPS_BOUND_REPO") or str(Path.cwd())
 
     if argv and argv[0] == "--write-all":
         # Every joined repo, because each terminal reads its OWN repo's snapshot
         # and beads state is per-repo.
         tenant = _tenant()
         repos = [r.get("path") for r in tenant.list_repos()] if tenant else [repo]
-        for r in [x for x in repos if x and os.path.isdir(x)]:
+        for r in [x for x in repos if x and Path(x).is_dir()]:
             snap = write_snapshot(r)
-            print(f"{os.path.basename(r):<24}"
+            print(f"{Path(r).name:<24}"
                   + "  ".join(f"{k}{v['green']}/{v['red']}" for k, v in snap["roles"].items()
                               if v["green"] or v["red"])
                   + (f"  unattributed={snap['unattributed']}" if snap["unattributed"] else ""))

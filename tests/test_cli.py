@@ -47,12 +47,12 @@ class BindingRefusalTests(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.bound = os.path.join(self._tmp.name, "bound")
-        self.other = os.path.join(self._tmp.name, "other")
-        os.makedirs(self.bound)
-        os.makedirs(self.other)
+        self.bound = str(Path(self._tmp.name) / "bound")
+        self.other = str(Path(self._tmp.name) / "other")
+        Path(self.bound).mkdir(parents=True)
+        Path(self.other).mkdir(parents=True)
         self.env = dict(os.environ,
-                        FPS_HOME=os.path.join(self._tmp.name, "fpshome"),
+                        FPS_HOME=str(Path(self._tmp.name) / "fpshome"),
                         FPS_BOUND_REPO=self.bound)
 
     def tearDown(self):

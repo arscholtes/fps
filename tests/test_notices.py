@@ -25,11 +25,11 @@ class NoticeTestCase(unittest.TestCase):
         self._saved = {k: os.environ.get(k) for k in
                        ("FPS_HOME", "FPS_BOUND_REPO", "FPS_REPO", "FPS_NOTICE_TTL_DAYS")}
         self._tmp = tempfile.TemporaryDirectory()
-        os.environ["FPS_HOME"] = os.path.join(self._tmp.name, "fpshome")
+        os.environ["FPS_HOME"] = str(Path(self._tmp.name) / "fpshome")
         for k in ("FPS_BOUND_REPO", "FPS_REPO", "FPS_NOTICE_TTL_DAYS"):
             os.environ.pop(k, None)
-        self.repo = os.path.join(self._tmp.name, "repo")
-        os.makedirs(self.repo)
+        self.repo = str(Path(self._tmp.name) / "repo")
+        Path(self.repo).mkdir(parents=True)
         self.conn = fps_tenant.connect_tenant(self.repo)
 
     def tearDown(self):
@@ -131,11 +131,11 @@ class MigrationTests(unittest.TestCase):
     def setUp(self):
         self._saved = {k: os.environ.get(k) for k in ("FPS_HOME", "FPS_GLOBAL_DB", "FPS_BOUND_REPO")}
         self._tmp = tempfile.TemporaryDirectory()
-        os.environ["FPS_HOME"] = os.path.join(self._tmp.name, "fpshome")
-        os.environ["FPS_GLOBAL_DB"] = os.path.join(self._tmp.name, "standup.db")
+        os.environ["FPS_HOME"] = str(Path(self._tmp.name) / "fpshome")
+        os.environ["FPS_GLOBAL_DB"] = str(Path(self._tmp.name) / "standup.db")
         os.environ.pop("FPS_BOUND_REPO", None)
-        self.repo = os.path.join(self._tmp.name, "repo")
-        os.makedirs(self.repo)
+        self.repo = str(Path(self._tmp.name) / "repo")
+        Path(self.repo).mkdir(parents=True)
 
         import sqlite3
         g = sqlite3.connect(os.environ["FPS_GLOBAL_DB"])
