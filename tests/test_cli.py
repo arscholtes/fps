@@ -59,7 +59,7 @@ class BindingRefusalTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def run_services(self, *argv):
-        return subprocess.run([sys.executable, str(SCRIPTS / "fps_services.py"), *argv],
+        return subprocess.run([sys.executable, str(SCRIPTS / "fps_services.py"), *argv], check=False,
                               capture_output=True, text=True, env=self.env, timeout=30)
 
     def test_a_conflicting_repo_is_refused(self):
@@ -80,7 +80,7 @@ class BindingRefusalTests(unittest.TestCase):
         self.assertIn("new one", p.stderr.lower())
 
     def test_open_loops_honour_the_same_binding(self):
-        p = subprocess.run([sys.executable, str(SCRIPTS / "fps_state.py"), "list", "--repo", self.other],
+        p = subprocess.run([sys.executable, str(SCRIPTS / "fps_state.py"), "list", "--repo", self.other], check=False,
                            capture_output=True, text=True, env=self.env, timeout=30)
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("bound to", p.stderr)

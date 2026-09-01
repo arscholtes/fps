@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import sqlite3
+
 import fps_services
 import fps_tenant
 
@@ -104,7 +106,7 @@ class AgeOutTests(NoticeTestCase):
         os.environ["FPS_NOTICE_TTL_DAYS"] = "14"
         self.add("ancient", created_at=days_ago(30))
         self.listing()
-        self.assertEqual(list(self.conn.execute("SELECT count(*) FROM notices"))[0][0], 1)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM notices").fetchone()[0], 1)
 
     def test_quiet_listing_of_only_aged_out_notices_prints_nothing(self):
         os.environ["FPS_NOTICE_TTL_DAYS"] = "14"
@@ -137,7 +139,6 @@ class MigrationTests(unittest.TestCase):
         self.repo = str(Path(self._tmp.name) / "repo")
         Path(self.repo).mkdir(parents=True)
 
-        import sqlite3
         g = sqlite3.connect(os.environ["FPS_GLOBAL_DB"])
         for stmt in fps_tenant.TENANT_SCHEMA:
             g.execute(stmt)
@@ -159,23 +160,22 @@ class MigrationTests(unittest.TestCase):
     def test_migration_copies_repo_scoped_rows_into_the_tenant(self):
         fps_tenant.migrate_from_global(self.repo)
         conn = fps_tenant.connect_tenant(self.repo)
-        self.assertEqual(list(conn.execute("SELECT count(*) FROM notices"))[0][0], 1)
-        self.assertEqual(list(conn.execute("SELECT count(*) FROM open_loops"))[0][0], 1)
+        self.assertEqual(conn.execute("SELECT count(*) FROM notices").fetchone()[0], 1)
+        self.assertEqual(conn.execute("SELECT count(*) FROM open_loops").fetchone()[0], 1)
         conn.close()
 
     def test_migration_leaves_the_global_database_intact(self):
-        import sqlite3
         fps_tenant.migrate_from_global(self.repo)
         g = sqlite3.connect(os.environ["FPS_GLOBAL_DB"])
-        self.assertEqual(list(g.execute("SELECT count(*) FROM lessons"))[0][0], 1)
-        self.assertEqual(list(g.execute("SELECT count(*) FROM notices"))[0][0], 1)
+        self.assertEqual(g.execute("SELECT count(*) FROM lessons").fetchone()[0], 1)
+        self.assertEqual(g.execute("SELECT count(*) FROM notices").fetchone()[0], 1)
         g.close()
 
     def test_migration_is_idempotent(self):
         fps_tenant.migrate_from_global(self.repo)
         fps_tenant.migrate_from_global(self.repo)
         conn = fps_tenant.connect_tenant(self.repo)
-        self.assertEqual(list(conn.execute("SELECT count(*) FROM notices"))[0][0], 1)
+        self.assertEqual(conn.execute("SELECT count(*) FROM notices").fetchone()[0], 1)
         conn.close()
 
     def test_migration_does_not_copy_person_scoped_tables(self):

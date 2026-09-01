@@ -13,6 +13,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import fps_services
+
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
@@ -85,8 +87,8 @@ class ReadOnlyAboutServicesTests(unittest.TestCase):
         # Notices and open loops are its own state; nothing else may be written.
         offenders = []
         for node in ast.walk(self.tree):
-            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "open":
-                if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
+            if (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "open"
+                    and len(node.args) > 1 and isinstance(node.args[1], ast.Constant)):
                     if "w" in str(node.args[1].value) or "a" in str(node.args[1].value):
                         offenders.append(ast.unparse(node))
         self.assertEqual(offenders, [])
@@ -100,7 +102,6 @@ class ReportingStaysReportingTests(unittest.TestCase):
         is reading a container's reported state — the same substring-versus-
         semantics trap that made ".git" match ".github" elsewhere in this stack.
         """
-        import fps_services
         src = (SCRIPTS / "fps_services.py").read_text()
         fn = next(n for n in ast.walk(ast.parse(src))
                   if isinstance(n, ast.FunctionDef) and n.name == "find_problems")
@@ -109,7 +110,7 @@ class ReportingStaysReportingTests(unittest.TestCase):
         self.assertTrue(callable(fps_services.find_problems))
 
     def test_the_status_command_exits_without_touching_anything(self):
-        p = subprocess.run([sys.executable, str(SCRIPTS / "fps_services.py"), "sessions"],
+        p = subprocess.run([sys.executable, str(SCRIPTS / "fps_services.py"), "sessions"], check=False,
                            capture_output=True, text=True, timeout=30)
         self.assertEqual(p.returncode, 0, p.stderr)
 

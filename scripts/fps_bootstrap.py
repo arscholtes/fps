@@ -183,7 +183,7 @@ def detect_git(repo):
     """@return [Hash] branch naming and commit style, read off recent history."""
     def git(*args):
         try:
-            p = subprocess.run(["git", "-C", str(repo), *args],
+            p = subprocess.run(["git", "-C", str(repo), *args], check=False,
                                capture_output=True, text=True, timeout=10)
             return p.stdout.strip() if p.returncode == 0 else ""
         except (OSError, subprocess.SubprocessError):

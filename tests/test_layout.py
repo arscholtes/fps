@@ -49,7 +49,7 @@ class SymmetryTests(unittest.TestCase):
     def test_three_screens_split_two_pilot_two(self):
         placed = fps_layout.arrange([EXTERNAL, BUILTIN, THIRD], ROLES)
         counts = {}
-        for role, screen in placed.items():
+        for screen in placed.values():
             counts[screen["idx"]] = counts.get(screen["idx"], 0) + 1
         self.assertEqual(counts[BUILTIN["idx"]], 1)
         self.assertEqual(sorted(v for k, v in counts.items() if k != BUILTIN["idx"]), [2, 2])
@@ -104,7 +104,7 @@ class CentreChoiceTests(unittest.TestCase):
 class RectTests(unittest.TestCase):
     def test_a_placed_role_gets_a_rect_inside_its_screen(self):
         rects = {r[0]: r[1:] for r in fps_layout.rects(fps_layout.arrange([BUILTIN], ["pilot"]))}
-        left, top, right, bottom = rects["pilot"]
+        left, _top, right, _bottom = rects["pilot"]
         self.assertGreaterEqual(left, BUILTIN["x"])
         self.assertLessEqual(right, BUILTIN["x"] + BUILTIN["w"])
 

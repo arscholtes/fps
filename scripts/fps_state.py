@@ -19,7 +19,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -138,7 +137,7 @@ def main():
         return 1
 
     conn = connect(repo)
-    {"init": lambda c, a: print(f"ready: {fps_tenant.db_path_for(repo)}"),
+    {"init": lambda _c, _a: print(f"ready: {fps_tenant.db_path_for(repo)}"),
      "add": cmd_add, "list": cmd_list, "close": cmd_close}[args.cmd](conn, args)
     return 0
 

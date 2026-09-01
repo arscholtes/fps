@@ -171,7 +171,7 @@ class TenantConnectionTests(TenantTestCase):
         ca.commit()
         ca.close()
         cb = fps_tenant.connect_tenant(b)
-        self.assertEqual(list(cb.execute("SELECT count(*) FROM notices"))[0][0], 0)
+        self.assertEqual(cb.execute("SELECT count(*) FROM notices").fetchone()[0], 0)
         cb.close()
 
     def test_connecting_also_joins_the_repo(self):

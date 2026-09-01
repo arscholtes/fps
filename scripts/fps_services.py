@@ -22,7 +22,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import os
 import re
@@ -44,7 +43,7 @@ ROLES = ("forge", "pilot", "shepherd", "warden", "mentor")
 
 def run(cmd, timeout=15):
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
         return p.returncode, p.stdout.strip()
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return 1, ""
@@ -105,8 +104,8 @@ def app_processes(repo):
     if code != 0:
         return []
     found = []
-    for line in out.splitlines():
-        line = line.strip()
+    for raw_line in out.splitlines():
+        line = raw_line.strip()
         if not line:
             continue
         pid, _, cmd = line.partition(" ")
@@ -140,8 +139,8 @@ def listening(port):
 def expected_ports():
     spec = os.environ.get("FPS_PORTS", DEFAULT_PORTS)
     out = []
-    for chunk in spec.split(","):
-        chunk = chunk.strip()
+    for raw_chunk in spec.split(","):
+        chunk = raw_chunk.strip()
         if not chunk:
             continue
         port, _, label = chunk.partition(":")
@@ -250,7 +249,7 @@ def cmd_ack(conn, args):
 
 # --------------------------------------------------------------------------- reports
 
-def cmd_status(conn, args):
+def cmd_status(_conn, args):
     print(f"local environment — {datetime.now().strftime('%a %b %d %H:%M')}")
 
     print("\ncontainers")
@@ -327,7 +326,7 @@ def find_problems(repo):
     return problems
 
 
-def cmd_problems(conn, args):
+def cmd_problems(_conn, args):
     problems = find_problems(args.repo_path)
     if not problems:
         if not args.quiet:
@@ -338,7 +337,7 @@ def cmd_problems(conn, args):
     return 0
 
 
-def cmd_sessions(conn, args):
+def cmd_sessions(_conn, _args):
     sessions = live_sessions()
     if not sessions:
         print("no live claude sessions")

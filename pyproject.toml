@@ -8,3 +8,12 @@ requires-python = ">=3.11"
 # Vendored copy of the shared strict defaults: a home path does not resolve on
 # a CI runner. The weekly audit reports it if this copy drifts from the source.
 extend = "ruff-shared.toml"
+
+[tool.ruff.lint.per-file-ignores]
+# These four import a sibling module that only becomes importable after the
+# sys.path.insert immediately above them. The import genuinely cannot precede
+# the line that makes it resolvable, so the rule is unsatisfiable here rather
+# than being ignored for convenience.
+"scripts/fps_counts.py" = ["PLC0415"]
+"scripts/fps_vscode.py" = ["PLC0415"]
+"tests/test_cli.py" = ["E402"]

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -117,7 +118,7 @@ def main():
         print("`code` is not on PATH — open that file from VS Code yourself.")
         return 0
 
-    subprocess.run([code, "-n", WORKSPACE])
+    subprocess.run([code, "-n", WORKSPACE], check=False)
     print(f"opened {WORKSPACE.name} in VS Code")
     print("Allow automatic tasks when asked — that is what opens the role terminals.")
     print("The terminal dropdown also has one profile per role, for opening one by hand.")
@@ -125,8 +126,7 @@ def main():
 
 
 def shutil_which(name):
-    from shutil import which
-    return which(name)
+    return shutil.which(name)
 
 
 if __name__ == "__main__":

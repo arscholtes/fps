@@ -139,8 +139,8 @@ def rects(placed, inset=INSET):
 def apply(rects):
     """Move existing windows. Never creates or closes one — sessions stay live."""
     lines = ['tell application "iTerm2"']
-    for win, l, t, r, b in rects:
-        lines.append(f"  set bounds of window {win} to {{{l}, {t}, {r}, {b}}}")
+    for win, left, top, right, bottom in rects:
+        lines.append(f"  set bounds of window {win} to {{{left}, {top}, {right}, {bottom}}}")
     lines.append("end tell")
     subprocess.run(["osascript", "-e", "\n".join(lines)], check=True)
 
@@ -150,10 +150,10 @@ if __name__ == "__main__":
     scr = screens()
     wins = list(range(1, int(sys.argv[1]) + 1)) if sys.argv[1:] and sys.argv[1].isdigit() else [1, 2]
     plan = layout(scr, wins, prefer)
-    for win, l, t, r, b in plan:
-        s = next(s for s in rank_screens(scr, prefer) if s["x"] <= l < s["x"] + s["w"])
+    for win, left, top, right, bottom in plan:
+        s = next(s for s in rank_screens(scr, prefer) if s["x"] <= left < s["x"] + s["w"])
         print(f"  window {win} → display {s['idx']}{' MAIN' if s['main'] else ''}  "
-              f"{r-l}x{b-t} at ({l},{t})")
+              f"{right-left}x{bottom-top} at ({left},{top})")
     if "--apply" in sys.argv:
         apply(plan)
         print("  applied — sessions untouched")
