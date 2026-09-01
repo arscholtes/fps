@@ -88,9 +88,9 @@ class ReadOnlyAboutServicesTests(unittest.TestCase):
         offenders = []
         for node in ast.walk(self.tree):
             if (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "open"
-                    and len(node.args) > 1 and isinstance(node.args[1], ast.Constant)):
-                    if "w" in str(node.args[1].value) or "a" in str(node.args[1].value):
-                        offenders.append(ast.unparse(node))
+                    and len(node.args) > 1 and isinstance(node.args[1], ast.Constant)
+                    and ("w" in str(node.args[1].value) or "a" in str(node.args[1].value))):
+                offenders.append(ast.unparse(node))
         self.assertEqual(offenders, [])
 
 

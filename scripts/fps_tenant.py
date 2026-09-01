@@ -290,6 +290,48 @@ def migrate_from_global(repo):
 
 # --------------------------------------------------------------------------- cli
 
+def _cmd_list():
+    entries = list_repos()
+    if not entries:
+        print("no repos have joined FPS yet")
+        return
+    for e in entries:
+        print(f"  {e['slug']:<28} {e['path']}")
+
+
+def _cmd_path(repo):
+    print(db_path_for(repo))
+
+
+def _cmd_join(repo):
+    print(f"joined: {repo}\n  tenant: {join(repo)}")
+
+
+def _cmd_migrate(repo):
+    counts = migrate_from_global(repo)
+    print(f"migrated into {db_path_for(repo)}")
+    for table, n in sorted(counts.items()):
+        print(f"  {table:<12} {n} row(s) copied")
+    print("  the shared database keeps its copies; nothing reads them now.")
+
+
+def _cmd_config(repo):
+    cfg = config_for(repo)
+    print(json.dumps(cfg, indent=2, sort_keys=True) if cfg else "{}")
+
+
+def _cmd_which(repo):
+    bound = "bound" if os.environ.get("FPS_BOUND_REPO") else "unbound (resolved from cwd)"
+    print(f"  repo   {repo}  [{bound}]")
+    print(f"  slug   {slug_for(repo)}")
+    print(f"  db     {db_path_for(repo)}")
+    print(f"  global {global_db_path()}")
+
+
+REPO_COMMANDS = {"path": _cmd_path, "join": _cmd_join, "migrate": _cmd_migrate,
+                 "config": _cmd_config, "which": _cmd_which}
+
+
 def main():
     ap = argparse.ArgumentParser(description="FPS repo binding and tenant databases")
     ap.add_argument("--repo", default=None)
@@ -301,12 +343,7 @@ def main():
     args = ap.parse_args()
 
     if args.cmd == "list":
-        entries = list_repos()
-        if not entries:
-            print("no repos have joined FPS yet")
-            return 0
-        for e in entries:
-            print(f"  {e['slug']:<28} {e['path']}")
+        _cmd_list()
         return 0
 
     try:
@@ -315,25 +352,7 @@ def main():
         print(f"fps: {exc}", file=sys.stderr)
         return 1
 
-    if args.cmd == "path":
-        print(db_path_for(repo))
-    elif args.cmd == "join":
-        print(f"joined: {repo}\n  tenant: {join(repo)}")
-    elif args.cmd == "migrate":
-        counts = migrate_from_global(repo)
-        print(f"migrated into {db_path_for(repo)}")
-        for table, n in sorted(counts.items()):
-            print(f"  {table:<12} {n} row(s) copied")
-        print("  the shared database keeps its copies; nothing reads them now.")
-    elif args.cmd == "config":
-        cfg = config_for(repo)
-        print(json.dumps(cfg, indent=2, sort_keys=True) if cfg else "{}")
-    elif args.cmd == "which":
-        bound = "bound" if os.environ.get("FPS_BOUND_REPO") else "unbound (resolved from cwd)"
-        print(f"  repo   {repo}  [{bound}]")
-        print(f"  slug   {slug_for(repo)}")
-        print(f"  db     {db_path_for(repo)}")
-        print(f"  global {global_db_path()}")
+    REPO_COMMANDS[args.cmd](repo)
     return 0
 
 

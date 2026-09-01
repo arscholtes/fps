@@ -281,49 +281,64 @@ def cmd_status(_conn, args):
     return 0
 
 
-def find_problems(repo):
-    """Only things observed, never inferred. Each entry is (severity, text)."""
-    problems = []
-
+def _container_problems():
     cs = containers()
-    if cs is not None:
-        for name, status in cs:
-            if "unhealthy" in status.lower() or "restarting" in status.lower():
-                problems.append(("error", f"container {name} is {status}"))
+    if cs is None:
+        return []
+    return [("error", f"container {name} is {status}") for name, status in cs
+            if "unhealthy" in status.lower() or "restarting" in status.lower()]
 
-    for port, label in expected_ports():
-        if not listening(port):
-            problems.append(("error", f"{label} is not listening on {port}"))
 
-    procs = app_processes(repo)
+def _port_problems():
+    return [("error", f"{label} is not listening on {port}")
+            for port, label in expected_ports() if not listening(port)]
+
+
+def _port_conflict_problems(procs):
     ports_seen = {}
-    for p in procs:
-        if p["port"]:
-            ports_seen.setdefault(p["port"], []).append(p)
+    for proc in procs:
+        if proc["port"]:
+            ports_seen.setdefault(proc["port"], []).append(proc)
+    out = []
     for port, owners in ports_seen.items():
         if len(owners) > 1:
             pids = ", ".join(o["pid"] for o in owners)
-            problems.append(("error", f"{len(owners)} processes claim port {port} (pids {pids})"))
+            out.append(("error", f"{len(owners)} processes claim port {port} (pids {pids})"))
+    return out
 
-    sidekiqs = [p for p in procs if p["kind"] == "sidekiq"]
-    trees = {p["worktree"] for p in sidekiqs if p["worktree"]}
+
+def _sidekiq_problems(procs):
+    trees = {p["worktree"] for p in procs if p["kind"] == "sidekiq" and p["worktree"]}
     if len(trees) > 1:
-        problems.append(("warn", f"sidekiq running for {len(trees)} worktrees: {', '.join(sorted(trees))}"))
+        return [("warn", f"sidekiq running for {len(trees)} worktrees: {', '.join(sorted(trees))}")]
+    return []
 
+
+def _log_problems(repo):
+    """Error lines in the tail of development.log. An unreadable log is not a problem."""
     log = Path(repo) / "log" / "development.log"
-    if log.exists():
-        try:
-            size = log.stat().st_size
-            with log.open("rb") as fh:
-                fh.seek(max(0, size - LOG_SCAN_BYTES))
-                tail = fh.read().decode("utf-8", "replace")
-            fatals = re.findall(r"^.*(?:FATAL|Error during|undefined method|PG::\w+Error).*$", tail, re.M)
-            if fatals:
-                problems.append(("warn", f"{len(fatals)} error line(s) in the last {LOG_SCAN_BYTES // 1000}KB of development.log"))
-        except OSError:
-            pass
+    if not log.exists():
+        return []
+    try:
+        size = log.stat().st_size
+        with log.open("rb") as fh:
+            fh.seek(max(0, size - LOG_SCAN_BYTES))
+            tail = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    fatals = re.findall(r"^.*(?:FATAL|Error during|undefined method|PG::\w+Error).*$", tail, re.M)
+    if fatals:
+        return [("warn", f"{len(fatals)} error line(s) in the last "
+                         f"{LOG_SCAN_BYTES // 1000}KB of development.log")]
+    return []
 
-    return problems
+
+def find_problems(repo):
+    """Only things observed, never inferred. Each entry is (severity, text)."""
+    procs = app_processes(repo)
+    return (_container_problems() + _port_problems()
+            + _port_conflict_problems(procs) + _sidekiq_problems(procs)
+            + _log_problems(repo))
 
 
 def cmd_problems(_conn, args):

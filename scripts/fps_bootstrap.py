@@ -103,50 +103,73 @@ def _has_python(repo):
     return False
 
 
+def _python_commands(j, repo, _lang):
+    out = {}
+    if j("tests").is_dir():
+        out["test"] = "python3 -m unittest discover -s tests"
+    if j("pyproject.toml").is_file() and "ruff" in _read(j("pyproject.toml")):
+        out["lint"] = "ruff check ."
+    for pkg in (Path(repo).name, "src"):
+        if j(pkg, "cli.py").is_file() and j(pkg, "__init__.py").is_file():
+            out["run"] = f"python3 -m {pkg}.cli --help"
+            break
+    return out
+
+
+def _ruby_commands(j, _repo, lang):
+    out = {}
+    if j("spec").is_dir():
+        out["test"] = "bundle exec rspec"
+    elif j("test").is_dir():
+        out["test"] = "bundle exec rake test"
+    if j(".rubocop.yml").is_file():
+        out["lint"] = "bundle exec rubocop"
+    if lang["framework"] == "rails":
+        out["run"] = "bin/rails server"
+    return out
+
+
+def _node_commands(j, _repo, _lang):
+    scripts = _json(j("package.json")).get("scripts", {})
+    out = {}
+    if "test" in scripts:
+        out["test"] = "npm test"
+    if "lint" in scripts:
+        out["lint"] = "npm run lint"
+    if "dev" in scripts:
+        out["run"] = "npm run dev"
+    elif "start" in scripts:
+        out["run"] = "npm start"
+    return out
+
+
+def _swift_commands(j, _repo, _lang):
+    if j("Package.swift").is_file():
+        return {"test": "swift test", "run": "swift run"}
+    return {}
+
+
+def _go_commands(_j, _repo, _lang):
+    return {"test": "go test ./...", "run": "go run ."}
+
+
+COMMAND_DETECTORS = {
+    "python": _python_commands, "ruby": _ruby_commands, "node": _node_commands,
+    "swift": _swift_commands, "go": _go_commands,
+}
+
+
 def detect_commands(repo, lang):
     """@return [Hash] {test, lint, run} — None where nothing in the repo says."""
     repo = str(repo)
+
     def j(*p):
         return Path(repo).joinpath(*p)
 
     out = {"test": None, "lint": None, "run": None}
-    language = lang["language"]
-
-    if language == "python":
-        if j("tests").is_dir():
-            out["test"] = "python3 -m unittest discover -s tests"
-        if j("pyproject.toml").is_file() and "ruff" in _read(j("pyproject.toml")):
-            out["lint"] = "ruff check ."
-        for pkg in (Path(repo).name, "src"):
-            if j(pkg, "cli.py").is_file() and j(pkg, "__init__.py").is_file():
-                out["run"] = f"python3 -m {pkg}.cli --help"
-                break
-    elif language == "ruby":
-        if j("spec").is_dir():
-            out["test"] = "bundle exec rspec"
-        elif j("test").is_dir():
-            out["test"] = "bundle exec rake test"
-        if j(".rubocop.yml").is_file():
-            out["lint"] = "bundle exec rubocop"
-        if lang["framework"] == "rails":
-            out["run"] = "bin/rails server"
-    elif language == "node":
-        scripts = _json(j("package.json")).get("scripts", {})
-        if "test" in scripts:
-            out["test"] = "npm test"
-        if "lint" in scripts:
-            out["lint"] = "npm run lint"
-        if "dev" in scripts:
-            out["run"] = "npm run dev"
-        elif "start" in scripts:
-            out["run"] = "npm start"
-    elif language == "swift":
-        if j("Package.swift").is_file():
-            out["test"] = "swift test"
-            out["run"] = "swift run"
-    elif language == "go":
-        out["test"] = "go test ./..."
-        out["run"] = "go run ."
+    detector = COMMAND_DETECTORS.get(lang["language"])
+    if detector:
+        out.update(detector(j, repo, lang))
     return out
 
 
@@ -218,84 +241,86 @@ def learn(repo):
     }
 
 
-def render(facts):
-    """@return [String] a CLAUDE.md draft containing only what was observed."""
-    L = []
+def _stack_section(facts):
     lang = facts["language"]
     label = lang["language"] + (f" / {lang['framework']}" if lang["framework"] else "")
+    return [f"# {facts['name']}", "",
+            "Repo-specific facts. The working rules that apply everywhere live in",
+            "`~/.claude/CLAUDE.md` and are not repeated here.", "",
+            f"**Stack**: {label}", ""]
 
-    L.append(f"# {facts['name']}")
-    L.append("")
-    L.append("Repo-specific facts. The working rules that apply everywhere live in")
-    L.append("`~/.claude/CLAUDE.md` and are not repeated here.")
-    L.append("")
-    L.append(f"**Stack**: {label}")
-    L.append("")
 
-    cmds = facts["commands"]
-    L.append("## Commands")
-    L.append("")
+def _commands_section(cmds):
+    out = ["## Commands", ""]
     if any(cmds.values()):
-        L.append("```bash")
+        out.append("```bash")
         for key, tag in (("test", "tests"), ("lint", "lint"), ("run", "run it")):
             if cmds[key]:
-                L.append(f"{cmds[key]:<44}# {tag}")
-        L.append("```")
+                out.append(f"{cmds[key]:<44}# {tag}")
+        out.append("```")
     else:
-        L.append("_Not determined from the repo._ Fill these in — a project whose test")
-        L.append("command nobody can name does not get its tests run.")
+        out += ["_Not determined from the repo._ Fill these in — a project whose test",
+                "command nobody can name does not get its tests run."]
     if not cmds["test"]:
-        L.append("")
-        L.append("**There is no test suite.** Nothing here is verified. Add one before")
-        L.append("changing behaviour, not after.")
-    L.append("")
+        out += ["", "**There is no test suite.** Nothing here is verified. Add one before",
+                "changing behaviour, not after."]
+    out.append("")
+    return out
 
-    if facts["promises"]:
-        L.append("## Promises this repo makes")
-        L.append("")
-        L.append("The README states these. Breaking one silently makes the README false:")
-        L.append("")
-        for p in facts["promises"]:
-            L.append(f"- {p}")
-        L.append("")
-        L.append("`~/.claude/skills/qa-gate/qa-gate.sh` enforces these where it can.")
-        L.append("")
 
-    if facts["layout"]:
-        L.append("## Layout")
-        L.append("")
-        L.append("| Directory | Files |")
-        L.append("|---|---|")
-        for d in facts["layout"]:
-            L.append(f"| `{d['name']}/` | {d['files']} |")
-        L.append("")
+def _promises_section(facts):
+    if not facts["promises"]:
+        return []
+    out = ["## Promises this repo makes", "",
+           "The README states these. Breaking one silently makes the README false:", ""]
+    out += [f"- {p}" for p in facts["promises"]]
+    out += ["", "`~/.claude/skills/qa-gate/qa-gate.sh` enforces these where it can.", ""]
+    return out
 
-    git = facts["git"]
-    if git["default_branch"] or git["commit_style"]:
-        L.append("## Conventions")
-        L.append("")
-        if git["default_branch"]:
-            L.append(f"- Default branch: `{git['default_branch']}`")
-        if git["commit_style"]:
-            L.append(f"- Commit subjects: {git['commit_style']}")
-        L.append("")
 
-    L.append("## Gaps")
-    L.append("")
+def _layout_section(facts):
+    if not facts["layout"]:
+        return []
+    out = ["## Layout", "", "| Directory | Files |", "|---|---|"]
+    out += [f"| `{d['name']}/` | {d['files']} |" for d in facts["layout"]]
+    out.append("")
+    return out
+
+
+def _conventions_section(git):
+    if not (git["default_branch"] or git["commit_style"]):
+        return []
+    out = ["## Conventions", ""]
+    if git["default_branch"]:
+        out.append(f"- Default branch: `{git['default_branch']}`")
+    if git["commit_style"]:
+        out.append(f"- Commit subjects: {git['commit_style']}")
+    out.append("")
+    return out
+
+
+def _gaps_section(facts, cmds):
+    out = ["## Gaps", ""]
     gaps = [name for name, value in
             (("test command", cmds["test"]), ("lint command", cmds["lint"]),
              ("run command", cmds["run"])) if not value]
     if gaps:
-        L.append("Not determined by reading the repo — confirm before relying on any of it:")
-        L.append("")
-        for g in gaps:
-            L.append(f"- {g}")
+        out += ["Not determined by reading the repo — confirm before relying on any of it:", ""]
+        out += [f"- {g}" for g in gaps]
     else:
-        L.append("None — everything above was read off the repo.")
-    L.append("")
-    L.append(f"_Drafted by fps_bootstrap on {facts['learned_at'][:10]}. Edit freely; it will not overwrite you._")
-    L.append("")
-    return "\n".join(L)
+        out.append("None — everything above was read off the repo.")
+    out += ["", f"_Drafted by fps_bootstrap on {facts['learned_at'][:10]}. "
+                "Edit freely; it will not overwrite you._", ""]
+    return out
+
+
+def render(facts):
+    """@return [String] a CLAUDE.md draft containing only what was observed."""
+    cmds = facts["commands"]
+    return "\n".join(
+        _stack_section(facts) + _commands_section(cmds) + _promises_section(facts)
+        + _layout_section(facts) + _conventions_section(facts["git"])
+        + _gaps_section(facts, cmds))
 
 
 def write_out(repo, facts, write_repo_file=False):

@@ -143,8 +143,10 @@ class MigrationTests(unittest.TestCase):
         for stmt in fps_tenant.TENANT_SCHEMA:
             g.execute(stmt)
         g.execute("CREATE TABLE lessons (id INTEGER PRIMARY KEY, topic TEXT)")
-        g.execute("INSERT INTO notices (for_role, severity, body, created_at) VALUES ('forge','warn','legacy notice','2026-08-20T00:00:00+00:00')")
-        g.execute("INSERT INTO open_loops (asked_of, question, asked_at) VALUES ('someone','a question','2026-08-20T00:00:00+00:00')")
+        g.execute("INSERT INTO notices (for_role, severity, body, created_at) "
+                  "VALUES ('forge','warn','legacy notice','2026-08-20T00:00:00+00:00')")
+        g.execute("INSERT INTO open_loops (asked_of, question, asked_at) "
+                  "VALUES ('someone','a question','2026-08-20T00:00:00+00:00')")
         g.execute("INSERT INTO lessons (topic) VALUES ('a lesson')")
         g.commit()
         g.close()
