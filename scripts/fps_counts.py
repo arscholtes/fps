@@ -31,6 +31,39 @@ BD_TIMEOUT = 5.0
 SNAPSHOT_DIR = Path("~/.local/share/fps").expanduser()
 
 
+def system_path():
+    """The aggregate every terminal reads. Identical everywhere, by design."""
+    return SNAPSHOT_DIR / "counts-system.json"
+
+
+def merge(snapshots):
+    """Sum per-repo snapshots into one view of the whole system.
+
+    A dot answers "what does this node have", which is a question about the node
+    rather than about a checkout. Per-repo counts rendered blank in the terminal
+    Alex actually sits in, because beads is empty in the repo his sessions bind
+    to while the work lives in two others.
+
+    Items keep their repo, so the enumerable list still says where to go.
+
+    @param snapshots [Array<Hash>] per-repo snapshots
+    @return [Hash] the same shape, summed
+    """
+    roles = {r: {"green": 0, "red": 0} for r in ROLES}
+    items, unattributed = [], 0
+    for snap in snapshots:
+        for role, counts in (snap.get("roles") or {}).items():
+            if role in roles:
+                roles[role]["green"] += counts.get("green", 0)
+                roles[role]["red"] += counts.get("red", 0)
+        unattributed += snap.get("unattributed", 0)
+        where = Path(snap["repo"]).name if snap.get("repo") else "?"
+        items += [{**item, "repo": item.get("repo") or where}
+                  for item in (snap.get("items") or [])]
+    return {"roles": roles, "unattributed": unattributed, "items": items,
+            "generated_at": datetime.now(timezone.utc).isoformat()}
+
+
 def snapshot_path(repo):
     """One snapshot per repo. Beads is per-repo, so a single shared file would
     show a workrepo terminal the counts from fps.
@@ -114,11 +147,20 @@ def snapshot(ready, gates, loops):
 
 # --------------------------------------------------------------------- fetching
 
+class BeadsUnavailable(RuntimeError):
+    """bd could not be run. Distinct from "bd ran and found nothing"."""
+
+
 def _bd(repo, *args):
     try:
         p = subprocess.run(["bd", *args, "--json"], cwd=repo, capture_output=True,
                            text=True, timeout=BD_TIMEOUT, check=False)
         return json.loads(p.stdout) if p.stdout.strip() else []
+    except FileNotFoundError as exc:
+        # A missing bd must not read as an empty queue. The 15s writer runs under
+        # launchd with a minimal PATH, where this silently produced all-zero
+        # counts that looked exactly like a quiet system.
+        raise BeadsUnavailable(f"bd not found on PATH ({exc})") from exc
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
         return []
 
@@ -200,18 +242,24 @@ def write_snapshot(repo, path=None):
     ready, gates, loops = fetch(repo)
     snap = snapshot(ready, gates, loops)
     snap["repo"] = repo
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    with tmp.open("w") as fh:
-        json.dump(snap, fh)
-    tmp.replace(path)          # atomic: a reader never sees a half-written file
+    _write_json(path, snap)
     return snap
 
 
-def read_snapshot(repo=None, path=None):
-    """@return [Hash, nil] this repo's last snapshot, or None if never written."""
+def _write_json(path, payload):
+    """Atomic write: a reader never sees a half-written file."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w") as fh:
+        json.dump(payload, fh)
+    tmp.replace(path)
+
+
+def read_snapshot(path=None):
+    """@return [Hash, nil] the system-wide snapshot, or None if never written."""
     if path is None:
-        path = snapshot_path(repo or os.environ.get("FPS_BOUND_REPO") or Path.cwd())
+        path = system_path()
     try:
         with Path(path).open() as fh:
             return json.load(fh)
@@ -262,16 +310,21 @@ def main(argv=None):
     repo = os.environ.get("FPS_BOUND_REPO") or str(Path.cwd())
 
     if argv and argv[0] == "--write-all":
-        # Every joined repo, because each terminal reads its OWN repo's snapshot
-        # and beads state is per-repo.
+        # Every joined repo, then one aggregate every terminal reads. Beads
+        # state is per-repo, but a node's queue is not: what a role can pick up
+        # is the same question wherever the terminal happens to be bound.
         tenant = _tenant()
         repos = [r.get("path") for r in tenant.list_repos()] if tenant else [repo]
+        snaps = []
         for r in [x for x in repos if x and Path(x).is_dir()]:
-            snap = write_snapshot(r)
-            print(f"{Path(r).name:<24}"
-                  + "  ".join(f"{k}{v['green']}/{v['red']}" for k, v in snap["roles"].items()
-                              if v["green"] or v["red"])
-                  + (f"  unattributed={snap['unattributed']}" if snap["unattributed"] else ""))
+            snaps.append(write_snapshot(r))
+        system = merge(snaps)
+        _write_json(system_path(), system)
+        print("system  " + "  ".join(f"{k}{v['green']}/{v['red']}"
+                                     for k, v in system["roles"].items()
+                                     if v["green"] or v["red"])
+              + (f"  unattributed={system['unattributed']}" if system["unattributed"] else "")
+              + f"  ({len(snaps)} repos)")
         return 0
 
     if argv and argv[0] == "--write":
@@ -281,7 +334,7 @@ def main(argv=None):
               + f"  unattributed={snap['unattributed']}")
         return 0
 
-    snap = read_snapshot(repo)
+    snap = read_snapshot()
     if snap is None:
         snap = write_snapshot(repo)      # first run, or the writer is not loaded yet
     role = argv[0] if argv and argv[0] in ROLES else None

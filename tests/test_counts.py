@@ -8,6 +8,7 @@ The counts must be ENUMERABLE. A number nobody can expand into a list becomes
 wallpaper, which is the failure his own audit found three times over.
 """
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -102,6 +103,62 @@ class TheSnapshot(unittest.TestCase):
         counted = sum(r["red"] for r in snap["roles"].values()) + snap["unattributed"]
         self.assertEqual(len(fps_counts.red_items(GATES, loops=[])), counted,
                          "the dots and the enumerable list must not disagree")
+
+
+class MissingBeadsIsLoud(unittest.TestCase):
+    """An empty queue and a broken writer must not look the same.
+
+    The 15s writer runs under launchd with a minimal PATH. bd was not on it, so
+    every count came back zero — indistinguishable from a quiet system, and the
+    status line reported it as fact.
+    """
+
+    def test_a_missing_bd_raises_rather_than_returning_nothing(self):
+        saved = os.environ["PATH"]
+        os.environ["PATH"] = "/nonexistent"
+        try:
+            with self.assertRaises(fps_counts.BeadsUnavailable):
+                fps_counts._bd("/tmp", "ready")
+        finally:
+            os.environ["PATH"] = saved
+
+
+class AcrossRepos(unittest.TestCase):
+    """Counts cover every repo, not the bound one.
+
+    Beads is per-repo, but Alex's sessions are bound to a repo where beads is
+    empty, so a per-repo count rendered blank in the terminal he actually sits
+    in. The dots answer "what does this node have", which is a question about
+    the node rather than about a checkout.
+    """
+
+    def test_green_sums_across_repos(self):
+        merged = fps_counts.merge([
+            fps_counts.snapshot(ready=[{"id": "a", "labels": ["forge"]}], gates=[], loops=[]),
+            fps_counts.snapshot(ready=[{"id": "b", "labels": ["forge"]},
+                                       {"id": "c", "labels": ["pilot"]}], gates=[], loops=[]),
+        ])
+        self.assertEqual(2, merged["roles"]["forge"]["green"])
+        self.assertEqual(1, merged["roles"]["pilot"]["green"])
+
+    def test_red_and_unattributed_sum_too(self):
+        one = fps_counts.snapshot(ready=[], gates=GATES, loops=[])
+        merged = fps_counts.merge([one, one])
+        self.assertEqual(2, merged["roles"]["forge"]["red"])
+        self.assertEqual(2, merged["unattributed"])
+
+    def test_items_say_which_repo_they_came_from(self):
+        """Aggregating must not lose where the work is, or the list stops being
+        actionable."""
+        snap = fps_counts.snapshot(ready=[], gates=GATES, loops=[])
+        snap["repo"] = "/x/fps"
+        merged = fps_counts.merge([snap])
+        self.assertTrue(all(i.get("repo") for i in merged["items"]))
+
+    def test_merging_nothing_is_an_empty_system_not_a_crash(self):
+        merged = fps_counts.merge([])
+        self.assertEqual(0, merged["roles"]["forge"]["green"])
+        self.assertIn("generated_at", merged)
 
 
 if __name__ == "__main__":
