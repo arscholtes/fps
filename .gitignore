@@ -15,4 +15,15 @@ __pycache__/
 *.swp
 
 # Issue tracker: contains owner email and cross-repo references.
-.beads/
+# The issue store and its database only. NOT the whole directory: .beads/hooks
+# is what wires the QA gate through core.hooksPath, and removing the directory
+# left this repo pointing at a path that did not exist, with no hook running at
+# all. issues.jsonl is the file that actually carries private data.
+.beads/issues.jsonl
+.beads/interactions.jsonl
+.beads/*.db
+.beads/backup/
+.beads/embeddeddolt/
+.beads/export-state.json
+.beads/last-touched
+.beads/.local_version
