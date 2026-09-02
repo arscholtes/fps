@@ -50,8 +50,10 @@ def merge(snapshots):
     @return [Hash] the same shape, summed
     """
     roles = {r: {"green": 0, "red": 0} for r in ROLES}
-    items, unattributed = [], 0
+    items, unattributed, unavailable = [], 0, []
     for snap in snapshots:
+        if not snap.get("available", True):
+            unavailable.append(Path(snap["repo"]).name if snap.get("repo") else "?")
         for role, counts in (snap.get("roles") or {}).items():
             if role in roles:
                 roles[role]["green"] += counts.get("green", 0)
@@ -61,6 +63,7 @@ def merge(snapshots):
         items += [{**item, "repo": item.get("repo") or where}
                   for item in (snap.get("items") or [])]
     return {"roles": roles, "unattributed": unattributed, "items": items,
+            "unavailable": unavailable,
             "generated_at": datetime.now(timezone.utc).isoformat()}
 
 
@@ -155,13 +158,24 @@ def _bd(repo, *args):
     try:
         p = subprocess.run(["bd", *args, "--json"], cwd=repo, capture_output=True,
                            text=True, timeout=BD_TIMEOUT, check=False)
-        return json.loads(p.stdout) if p.stdout.strip() else []
     except FileNotFoundError as exc:
         # A missing bd must not read as an empty queue. The 15s writer runs under
         # launchd with a minimal PATH, where this silently produced all-zero
         # counts that looked exactly like a quiet system.
         raise BeadsUnavailable(f"bd not found on PATH ({exc})") from exc
-    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if p.returncode != 0:
+        # The same failure the branch above exists to prevent, one step later:
+        # a repo with no .beads exits 1, and returning [] here reported six of
+        # eight joined repos as quiet rather than unreadable.
+        detail = (p.stderr or "").strip().splitlines()
+        raise BeadsUnavailable(
+            f"bd {' '.join(args)} exit {p.returncode} in {repo}"
+            + (f": {detail[0]}" if detail else ""))
+    try:
+        return json.loads(p.stdout) if p.stdout.strip() else []
+    except json.JSONDecodeError:
         return []
 
 
@@ -237,10 +251,19 @@ def _tenant():
 
 
 def write_snapshot(repo, path=None):
-    """Fetch and persist. Called by the 15s writer, never by the status line."""
+    """Fetch and persist. Called by the 15s writer, never by the status line.
+
+    A repo bd cannot read is recorded as unavailable rather than as zeros, so
+    "no answer" and "nothing to do" stay distinguishable downstream.
+    """
     path = path or snapshot_path(repo)
-    ready, gates, loops = fetch(repo)
-    snap = snapshot(ready, gates, loops)
+    try:
+        ready, gates, loops = fetch(repo)
+        snap = snapshot(ready, gates, loops)
+        snap["available"] = True
+    except BeadsUnavailable:
+        snap = snapshot([], [], _loops(repo))
+        snap["available"] = False
     snap["repo"] = repo
     _write_json(path, snap)
     return snap
@@ -289,6 +312,10 @@ def _render_list(snap, role=None):
     age = age_seconds(snap)
     if age is not None and age > STALE_AFTER:
         lines.append(f"counts are {int(age)}s old — the writer may not be running\n")
+    # Zeros from a repo bd could not read are not evidence of a quiet repo.
+    if snap.get("unavailable"):
+        lines.append("no beads database: " + ", ".join(snap["unavailable"])
+                     + " — these report nothing, not nothing-to-do\n")
     if not items:
         lines.append(f"nothing is waiting on you for {role}." if role
                      else "nothing is waiting on you.")
@@ -324,6 +351,7 @@ def main(argv=None):
                                      for k, v in system["roles"].items()
                                      if v["green"] or v["red"])
               + (f"  unattributed={system['unattributed']}" if system["unattributed"] else "")
+              + (f"  unreadable={','.join(system['unavailable'])}" if system["unavailable"] else "")
               + f"  ({len(snaps)} repos)")
         return 0
 

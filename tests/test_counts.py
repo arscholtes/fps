@@ -10,6 +10,7 @@ wallpaper, which is the failure his own audit found three times over.
 
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -159,6 +160,43 @@ class AcrossRepos(unittest.TestCase):
         merged = fps_counts.merge([])
         self.assertEqual(0, merged["roles"]["forge"]["green"])
         self.assertIn("generated_at", merged)
+
+
+class MissingBeadsIsNotAnEmptyQueue(unittest.TestCase):
+    """A repo bd cannot read must not report the same thing as a quiet one.
+
+    _bd() raised on a missing binary for exactly this reason, then returned []
+    one branch over when bd ran and exited non-zero. Six of eight joined repos
+    have no .beads at all, so every 15s cycle turned "cannot answer" into
+    "nothing ready" — the shape the launchd PATH incident already cost once.
+    """
+
+    def test_a_repo_bd_cannot_read_raises_rather_than_reporting_nothing(self):
+        with tempfile.TemporaryDirectory() as d, \
+             self.assertRaises(fps_counts.BeadsUnavailable) as caught:
+            fps_counts._bd(d, "ready")
+        # Distinguishes a non-zero exit from the missing-binary path, which
+        # would otherwise satisfy this test for the wrong reason.
+        self.assertIn("exit", str(caught.exception))
+
+    def test_a_beadsless_repo_is_marked_unavailable_not_quiet(self):
+        with tempfile.TemporaryDirectory() as d:
+            snap = fps_counts.write_snapshot(d, path=Path(d) / "snap.json")
+        self.assertFalse(snap["available"])
+        self.assertEqual(0, snap["roles"]["forge"]["green"])
+
+    def test_merge_reports_which_repos_could_not_be_read(self):
+        readable = fps_counts.snapshot(ready=[], gates=[], loops=[])
+        readable.update(repo="/x/fps", available=True)
+        blind = fps_counts.snapshot(ready=[], gates=[], loops=[])
+        blind.update(repo="/x/workrepo", available=False)
+        merged = fps_counts.merge([readable, blind])
+        self.assertEqual(["workrepo"], merged["unavailable"])
+
+    def test_a_fully_readable_system_names_nothing_unavailable(self):
+        one = fps_counts.snapshot(ready=[], gates=[], loops=[])
+        one.update(repo="/x/fps", available=True)
+        self.assertEqual([], fps_counts.merge([one])["unavailable"])
 
 
 if __name__ == "__main__":
