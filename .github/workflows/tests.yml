@@ -57,6 +57,21 @@ jobs:
           print("stdlib only — promise holds")
           PY
 
+  # The adopted daily-standup skill uses pytest, so `unittest discover -s tests`
+  # never sees its 65 tests. An adopted suite nobody runs is the dead gate this
+  # repo has already found twice.
+  adopted-skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Run the adopted skills' own suites
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest skills/daily-standup -q
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:
