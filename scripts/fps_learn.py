@@ -25,9 +25,13 @@ import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_DB = Path(
-    os.environ.get("FPS_DB", "~/Desktop/weekly_standup/daily-standup-agent/standup.db")
-).expanduser()
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import fps_tenant
+
+# One owner for this path, in fps_tenant. Two copies of it drifted apart once
+# already, which is how fps_learn ended up reading a file nothing else wrote to.
+DEFAULT_DB = Path(os.environ.get("FPS_DB", fps_tenant.GLOBAL_DB)).expanduser()
 LEVELS = ("senior", "staff", "both")
 # A queue nobody can face is a queue nobody reads. Warn before it gets there.
 LIBRARY_NOTE_FROM = 20

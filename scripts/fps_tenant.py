@@ -37,9 +37,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# The person-scoped database. A launchd job (standup-morning-doc.sh) reads this
-# path directly, so it is not ours to move.
-GLOBAL_DB = "~/Desktop/weekly_standup/daily-standup-agent/standup.db"
+# The person-scoped database: lessons and standup, the tables that outlive any one
+# repo. Deliberately NOT under ~/Desktop. That path is iCloud-backed, and an evicted
+# file there stats instantly while sqlite3.connect blocks in an uninterruptible read
+# that no timeout interrupts — measured repeatedly on 2026-09-03 and 2026-09-04. It
+# was read at every tab start, so every session paid for it.
+#
+# The reason previously given for leaving it there was that standup-morning-doc.sh
+# reads the path directly. That job invokes bin/morning_doc.py, which does not exist.
+GLOBAL_DB = "~/.local/share/fps/standup.db"
 DEFAULT_HOME = "~/.fps"
 SLUG_HASH_LEN = 8
 # Two weeks of session starts is every chance a notice will ever get to be read.
