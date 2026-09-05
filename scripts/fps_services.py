@@ -176,6 +176,55 @@ def live_sessions():
     return sorted(out, key=lambda s: s["name"])
 
 
+# Hermes runs the same roles under a different agent. It keeps sessions in its own
+# per-profile SQLite store, but liveness is asked of the process rather than that
+# store, for the same reason it is for Claude: a record outlives the thing it
+# describes, and a pid that answers does not.
+HERMES_PROFILE = re.compile(r"(?:^|\s)-p\s+(\w+)")
+
+
+def hermes_profile(cmdline):
+    """The profile a hermes command line names.
+
+    @param cmdline [String] a full process command line
+    @return [String, nil] profile name, or nil when this is not a hermes session
+    """
+    if "/hermes" not in cmdline and not cmdline.startswith("hermes"):
+        return None
+    match = HERMES_PROFILE.search(cmdline)
+    return match.group(1) if match else None
+
+
+def hermes_sessions():
+    """Running hermes sessions, discovered by process rather than by its store."""
+    try:
+        listing = subprocess.run(["ps", "-axo", "pid=,command="], check=False,
+                                 capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    out = []
+    for line in listing.splitlines():
+        pid, _, cmdline = line.strip().partition(" ")
+        profile = hermes_profile(cmdline)
+        if not profile or not pid.isdigit():
+            continue
+        out.append({"pid": int(pid), "name": profile, "cwd": _cwd_of(int(pid)), "kind": "hermes"})
+    return sorted(out, key=lambda s: s["name"])
+
+
+def _cwd_of(pid):
+    """@return [String] the process working directory, or "" when it cannot be read."""
+    try:
+        result = subprocess.run(["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+                                check=False, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    for line in result.stdout.splitlines():
+        if line.startswith("n"):
+            return line[1:]
+    return ""
+
+
 # --------------------------------------------------------------------------- notices
 
 def connect(repo):
@@ -353,12 +402,16 @@ def cmd_problems(_conn, args):
 
 
 def cmd_sessions(_conn, _args):
-    sessions = live_sessions()
+    sessions = live_sessions() + hermes_sessions()
     if not sessions:
-        print("no live claude sessions")
+        print("no live sessions")
         return 0
-    for s in sessions:
-        print(f"  {s['name'][:38]:<40} pid {s['pid']:<7} {s['cwd']}")
+    # The agent is named only when more than one is in play. A single-agent machine
+    # does not need a column telling it so.
+    mixed = len({s.get("kind") == "hermes" for s in sessions}) > 1
+    for s in sorted(sessions, key=lambda x: (x["name"], x["pid"])):
+        agent = "  [hermes]" if mixed and s.get("kind") == "hermes" else ""
+        print(f"  {s['name'][:38]:<40} pid {s['pid']:<7} {s['cwd']}{agent}")
     return 0
 
 

@@ -110,6 +110,31 @@ export FPS_NOTICE_TTL_DAYS=14          # how long an unacked notice is delivered
 A directory that does not exist is a hard error naming what to set, rather than a silent
 `cd` to nowhere.
 
+## Running a role under Hermes instead
+
+`FPS_AGENT=hermes fps <role>` launches the same role under Hermes rather than Claude
+Code. Everything before the launch is identical — the tab colour, the directory, the
+brief, the notices and the open loops are the same job whoever answers.
+
+The charter reaches the two agents differently, and that difference is the only thing
+worth remembering. Claude Code takes it as a file on every launch, so it is always
+current. Hermes reads `SOUL.md` from its profile, so the charter has to be **put** there:
+
+```bash
+scripts/fps-hermes-sync        # writes every charter into its Hermes profile
+```
+
+**A charter edit is not finished until that has run.** `fps-tab` refuses to launch a
+Hermes role whose profile has no charter rather than starting a session with no job.
+
+Profiles are created without alias wrappers on purpose. `hermes profile create` offers
+to put a bare `forge` command on your PATH, which would be a second way to start a role
+that FPS already starts.
+
+`fps-services sessions` lists both agents, and names the agent only when both are
+running. Liveness is asked of the process rather than of either agent's session store,
+because a record outlives the thing it describes and a pid that answers does not.
+
 ## The charters
 
 `charters/{forge,pilot,shepherd,warden}.md`. Keep them short. Instruction-following degrades as

@@ -148,6 +148,36 @@ if [ "$ROLE" = "shell" ]; then
   exec "${SHELL:-/bin/zsh}" -l
 fi
 
+# ---------------------------------------------------------------------------
+# WHICH AGENT. Claude Code by default; FPS_AGENT=hermes runs the same role under
+# Hermes instead. The charter reaches each one differently: Claude takes it as a
+# system-prompt file per launch, Hermes carries it in the profile's SOUL.md,
+# written there once by scripts/fps-hermes-sync.
+#
+# Everything above this line is agent-agnostic on purpose — the tab colour, the
+# directory, the notices and the open loops are the same job whoever answers.
+# ---------------------------------------------------------------------------
+AGENT="${FPS_AGENT:-claude}"
+
+if [ "$AGENT" = "hermes" ]; then
+  command -v hermes >/dev/null 2>&1 || {
+    echo "fps: FPS_AGENT=hermes but hermes is not on PATH." >&2
+    exit 1
+  }
+  SOUL="$HOME/.hermes/profiles/$ROLE/SOUL.md"
+  if ! grep -q "FPS CHARTER" "$SOUL" 2>/dev/null; then
+    echo "fps: $ROLE's Hermes profile is missing its charter." >&2
+    echo "     Run: $SKILL_DIR/scripts/fps-hermes-sync" >&2
+    exit 1
+  fi
+  exec hermes -p "$ROLE" "$@"
+fi
+
+if [ "$AGENT" != "claude" ]; then
+  echo "fps: unknown FPS_AGENT '$AGENT' — expected claude or hermes." >&2
+  exit 1
+fi
+
 # mentor gates a lesson on the human predicting an answer, and a suggested reply
 # containing that answer hands it to them — so the suggestion is off for this role
 # and left alone everywhere else.
