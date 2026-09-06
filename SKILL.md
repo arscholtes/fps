@@ -168,6 +168,13 @@ Notices carry **facts, not context**: what is broken and what it blocks. A revie
 better without the builder's context, and the same holds here — the PR, the issue, and the
 logs carry the why.
 
+**This is enforced at 400 characters, not asked for.** It was asked for first, and of the
+first 45 notices sent the median body ran 1,351 characters. On 2026-09-06 twelve of the
+fifteen unacked in forge's queue were specs; three of them asked for the same build on
+three separate days and none became a bead. A spec in a notice cannot be sequenced,
+depended on, superseded or closed, so it sits there being redelivered until it is
+wallpaper. `notify` now refuses anything longer and prints the `bd create` to use instead.
+
 ## The learning queue
 
 Any session pushes something worth understanding and carries on:

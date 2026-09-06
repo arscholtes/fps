@@ -232,9 +232,38 @@ def connect(repo):
     return fps_tenant.connect_tenant(repo)
 
 
+# A notice carries a fact; a spec goes in a bead. The charter has said so since it
+# was written and it was ignored anyway: of the first 45 notices sent, the median
+# body ran 1,351 characters and two were under 400. On 2026-09-06 twelve of the
+# fifteen unacked in forge's queue were specs, three of them asking for the same
+# build on three separate days, none of which ever became a bead.
+#
+# The cap is 400 because the two shortest real notices ever sent were 296 and 358.
+# It is a refusal rather than a warning because the rule already existed as advice
+# and that is precisely what did not work.
+NOTICE_MAX_CHARS = 400
+
+
+def too_long_to_be_a_fact(body):
+    """@return [String, nil] why this body cannot be a notice, or nil if it can."""
+    length = len(body or "")
+    if length <= NOTICE_MAX_CHARS:
+        return None
+    return (f"this is {length} characters; a notice caps at {NOTICE_MAX_CHARS}.\n"
+            "     A notice carries a fact — what broke, what it blocks. Anything longer\n"
+            "     is a spec, and a spec goes in a bead where it can be sequenced,\n"
+            "     depended on and closed:\n"
+            "       bd create \"<title>\" -p 2 -d \"<the spec>\"\n"
+            "     Then send the notice as one line pointing at the bead id.")
+
+
 def cmd_notify(conn, args):
     if args.for_role and args.for_role not in ROLES:
         print(f"unknown role {args.for_role!r}; expected one of {', '.join(ROLES)}", file=sys.stderr)
+        return 1
+    problem = too_long_to_be_a_fact(args.what)
+    if problem:
+        print(f"fps-services notify: {problem}", file=sys.stderr)
         return 1
     conn.execute(
         "INSERT INTO notices (for_role, severity, body, created_at) VALUES (?, ?, ?, ?)",
