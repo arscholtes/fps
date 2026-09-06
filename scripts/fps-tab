@@ -164,12 +164,39 @@ if [ "$AGENT" = "hermes" ]; then
     echo "fps: FPS_AGENT=hermes but hermes is not on PATH." >&2
     exit 1
   }
-  SOUL="$HOME/.hermes/profiles/$ROLE/SOUL.md"
-  if ! grep -q "FPS CHARTER" "$SOUL" 2>/dev/null; then
-    echo "fps: $ROLE's Hermes profile is missing its charter." >&2
-    echo "     Run: $SKILL_DIR/scripts/fps-hermes-sync" >&2
+
+  # mentor is not portable. It gates a lesson on the human predicting an answer,
+  # which Claude Code enforces with --prompt-suggestions=false; Hermes has no
+  # equivalent, so a Hermes mentor would hand over the answer it is meant to
+  # withhold. Its charter also dispatches /teach-system, a Claude Code skill.
+  if [ "$ROLE" = "mentor" ]; then
+    echo "fps: mentor does not run under Hermes." >&2
+    echo "     It withholds answers using --prompt-suggestions=false, which Hermes" >&2
+    echo "     has no equivalent for, and its charter calls the teach-system skill." >&2
+    echo "     Run: fps mentor" >&2
     exit 1
   fi
+
+  SOUL="$HOME/.hermes/profiles/$ROLE/SOUL.md"
+  [ -d "$(dirname "$SOUL")" ] || {
+    echo "fps: no Hermes profile for $ROLE." >&2
+    echo "     Create it: hermes profile create $ROLE --no-alias" >&2
+    exit 1
+  }
+  # The charter is written HERE, at launch, rather than pushed ahead of time and
+  # checked for presence. A presence check passes on a stale charter, which is the
+  # failure it was supposed to prevent. Claude Code reads the file per launch and is
+  # therefore always current; this is how Hermes gets the same guarantee.
+  MARK="<!-- ===== FPS CHARTER"
+  tmp="$(mktemp)"
+  awk -v mark="$MARK" 'index($0, mark) { exit } { print }' "$SOUL" > "$tmp" 2>/dev/null || true
+  {
+    printf '\n\n%s — written at launch ===== -->\n' "$MARK"
+    printf 'The role charter from fps/charters/%s.md. Above is voice; this is scope.\n\n' "$ROLE"
+    cat "$CHARTER"
+  } >> "$tmp"
+  mv "$tmp" "$SOUL"
+
   exec hermes -p "$ROLE" "$@"
 fi
 

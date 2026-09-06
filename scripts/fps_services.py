@@ -180,7 +180,7 @@ def live_sessions():
 # per-profile SQLite store, but liveness is asked of the process rather than that
 # store, for the same reason it is for Claude: a record outlives the thing it
 # describes, and a pid that answers does not.
-HERMES_PROFILE = re.compile(r"(?:^|\s)-p\s+(\w+)")
+HERMES_PROFILE = re.compile(r"(?:^|\s)(?:-p|--profile)[\s=]+(\w+)")
 
 
 def hermes_profile(cmdline):

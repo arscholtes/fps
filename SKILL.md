@@ -116,20 +116,19 @@ A directory that does not exist is a hard error naming what to set, rather than 
 Code. Everything before the launch is identical — the tab colour, the directory, the
 brief, the notices and the open loops are the same job whoever answers.
 
-The charter reaches the two agents differently, and that difference is the only thing
-worth remembering. Claude Code takes it as a file on every launch, so it is always
-current. Hermes reads `SOUL.md` from its profile, so the charter has to be **put** there:
+The charter reaches the two agents differently. Claude Code takes it as a file on every
+launch; Hermes reads `SOUL.md` from its profile, so `fps-tab` **writes the charter into
+that file at launch**, replacing what it wrote last time. There is no sync step and no
+rule to remember, because a step you have to remember is a step that gets skipped, and a
+guard that checks the charter is merely *present* passes on a stale one.
 
-```bash
-scripts/fps-hermes-sync        # writes every charter into its Hermes profile
-```
+**mentor does not run under Hermes**, and `fps-tab` refuses it. mentor gates a lesson on
+the human predicting the answer, enforced with `--prompt-suggestions=false`, and Hermes
+has no equivalent — a Hermes mentor would hand over the answer it exists to withhold. Its
+charter also dispatches a Claude Code skill.
 
-**A charter edit is not finished until that has run.** `fps-tab` refuses to launch a
-Hermes role whose profile has no charter rather than starting a session with no job.
-
-Profiles are created without alias wrappers on purpose. `hermes profile create` offers
-to put a bare `forge` command on your PATH, which would be a second way to start a role
-that FPS already starts.
+Create a profile with `hermes profile create <role> --no-alias`. The alias would put a
+bare `forge` on your PATH, which is a second way to start a role that FPS already starts.
 
 `fps-services sessions` lists both agents, and names the agent only when both are
 running. Liveness is asked of the process rather than of either agent's session store,

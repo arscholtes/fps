@@ -21,7 +21,11 @@ class HermesProfileFromACommandLine(unittest.TestCase):
         self.assertEqual(fps_services.hermes_profile(line), "forge")
 
     def test_a_bare_invocation(self):
-        self.assertEqual(fps_services.hermes_profile("hermes -p mentor chat"), "mentor")
+        self.assertEqual(fps_services.hermes_profile("hermes -p shepherd chat"), "shepherd")
+
+    def test_the_long_form_hermes_own_gateway_uses(self):
+        self.assertEqual(fps_services.hermes_profile("/opt/hermes --profile warden gateway run"), "warden")
+        self.assertEqual(fps_services.hermes_profile("/opt/hermes --profile=warden gateway run"), "warden")
 
     def test_hermes_without_a_profile_is_not_a_role_session(self):
         self.assertIsNone(fps_services.hermes_profile("/usr/local/bin/hermes sessions list"))
