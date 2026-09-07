@@ -154,10 +154,36 @@ class BeadsUnavailable(RuntimeError):
     """bd could not be run. Distinct from "bd ran and found nothing"."""
 
 
+# bd locates a workspace by asking git, so anything that tells git where the
+# repository is decides which repo gets counted - whatever cwd says.
+#
+# GIT_DIR is the one that bit. Git exports it into every hook, and during a push
+# from a worktree it holds that worktree's gitdir; bd resolved it from an empty
+# temporary directory and answered with fps's queue. Measured: eleven ready
+# issues, first id fps-fwt, reported for a directory containing nothing.
+#
+# BEADS_DIR does the same thing one layer up, by naming the workspace outright.
+#
+# The failure this prevents is not "no answer". It is another repo's answer
+# presented as this one's, which no reader can tell is wrong by looking.
+# cwd is the only thing allowed to decide which repo is being counted.
+WORKSPACE_OVERRIDES = (
+    "BEADS_DIR",
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+    "GIT_PREFIX", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_NAMESPACE",
+)
+
+
+def _bd_env():
+    """@return [Hash] the parent environment minus anything that re-points bd."""
+    return {k: v for k, v in os.environ.items() if k not in WORKSPACE_OVERRIDES}
+
+
 def _bd(repo, *args):
     try:
         p = subprocess.run(["bd", *args, "--json"], cwd=repo, capture_output=True,
-                           text=True, timeout=BD_TIMEOUT, check=False)
+                           text=True, timeout=BD_TIMEOUT, check=False, env=_bd_env())
     except FileNotFoundError as exc:
         # A missing bd must not read as an empty queue. The 15s writer runs under
         # launchd with a minimal PATH, where this silently produced all-zero

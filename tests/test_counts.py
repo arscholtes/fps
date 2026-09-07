@@ -9,10 +9,12 @@ wallpaper, which is the failure his own audit found three times over.
 """
 
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -184,6 +186,39 @@ class MissingBeadsIsNotAnEmptyQueue(unittest.TestCase):
             snap = fps_counts.write_snapshot(d, path=Path(d) / "snap.json")
         self.assertFalse(snap["available"])
         self.assertEqual(0, snap["roles"]["forge"]["green"])
+
+    def test_nothing_that_repoints_git_or_beads_is_handed_to_bd(self):
+        """cwd is the only thing allowed to decide which repo is being counted.
+
+        BEADS_DIR overrides workspace resolution, so a value merely present in
+        the environment makes every repo read the SAME database whatever cwd
+        says. Found during a push: the beads pre-push hook runs `bd hooks run
+        pre-push` in the shell that then runs the gate, and bd resolves
+        BEADS_DIR from there - a beadsless temporary directory reported 11 ready
+        issues belonging to fps.
+
+        That is strictly worse than the failure this class exists for. There,
+        "cannot answer" became "nothing ready". Here it becomes "another repo's
+        answer, presented as yours", which no reader can tell is wrong.
+        """
+        seen = {}
+
+        def fake_run(cmd, **kw):
+            seen.update(kw.get("env") or {})
+            return subprocess.CompletedProcess(cmd, 1, "", "no beads database found")
+
+        os.environ["BEADS_DIR"] = "/somewhere/else/.beads"
+        os.environ["GIT_DIR"] = "/somewhere/else/.git"
+        try:
+            with mock.patch.object(fps_counts.subprocess, "run", fake_run), \
+                 self.assertRaises(fps_counts.BeadsUnavailable):
+                fps_counts._bd("/tmp", "ready")
+        finally:
+            os.environ.pop("BEADS_DIR", None)
+            os.environ.pop("GIT_DIR", None)
+        self.assertNotIn("BEADS_DIR", seen)
+        self.assertNotIn("GIT_DIR", seen)
+        self.assertTrue(seen, "the child was given no environment at all")
 
     def test_merge_reports_which_repos_could_not_be_read(self):
         readable = fps_counts.snapshot(ready=[], gates=[], loops=[])
