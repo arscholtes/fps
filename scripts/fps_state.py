@@ -63,14 +63,52 @@ def cmd_add(conn, args):
     print(f"tracked ({age_days(asked_at)}d): asked {args.who} — {args.what}")
 
 
-def cmd_list(conn, args):
+def _open_rows(repo):
+    """@return [Array<sqlite3.Row>] open loops in another repo's tenant."""
+    try:
+        conn = fps_tenant.connect_tenant(repo)
+        return list(conn.execute(
+            "SELECT * FROM open_loops WHERE resolved_at IS NULL ORDER BY asked_at"))
+    except Exception:
+        return []
+
+
+def _elsewhere(repo):
+    """Open loops in every joined repo except this one.
+
+    A loop is a question waiting on a person, and the person is Alex in every
+    repo. Scoping the view to one tenant hid four job applications behind a
+    message saying there were none, so the empty case reads across tenants.
+    Read-only; the session binding still governs every write.
+
+    @return [Array<(String, Array<sqlite3.Row>)>] repo name and its open loops.
+    """
+    here = str(Path(repo).resolve()) if repo else None
+    found = []
+    for entry in fps_tenant.list_repos():
+        path = entry.get("path")
+        if not path or (here and str(Path(path).resolve()) == here):
+            continue
+        rows = _open_rows(path)
+        if rows:
+            found.append((Path(path).name, rows))
+    return found
+
+
+def cmd_list(conn, args, repo=None):
     sql = "SELECT * FROM open_loops"
     if not args.all:
         sql += " WHERE resolved_at IS NULL"
     sql += " ORDER BY asked_at ASC"
     rows = list(conn.execute(sql))
     if not rows:
-        print("no open loops")
+        where = Path(repo).name if repo else "this repo"
+        print(f"no open loops in {where}")
+        for name, found in _elsewhere(repo):
+            print(f"\n  {len(found)} open in {name}:")
+            for r in found:
+                print(f"    [{r['id']:>3}] {age_days(r['asked_at']):>3}d  "
+                      f"{r['asked_of']}: {r['question']}")
         return
     for r in rows:
         days = age_days(r["asked_at"])
@@ -138,7 +176,8 @@ def main():
 
     conn = connect(repo)
     {"init": lambda _c, _a: print(f"ready: {fps_tenant.db_path_for(repo)}"),
-     "add": cmd_add, "list": cmd_list, "close": cmd_close}[args.cmd](conn, args)
+     "add": cmd_add, "list": lambda c, a: cmd_list(c, a, repo), "close": cmd_close
+     }[args.cmd](conn, args)
     return 0
 
 
