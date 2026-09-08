@@ -224,9 +224,9 @@ class MissingBeadsIsNotAnEmptyQueue(unittest.TestCase):
         readable = fps_counts.snapshot(ready=[], gates=[], loops=[])
         readable.update(repo="/x/fps", available=True)
         blind = fps_counts.snapshot(ready=[], gates=[], loops=[])
-        blind.update(repo="/x/workrepo", available=False)
+        blind.update(repo="/x/other-repo", available=False)
         merged = fps_counts.merge([readable, blind])
-        self.assertEqual(["workrepo"], merged["unavailable"])
+        self.assertEqual(["other-repo"], merged["unavailable"])
 
     def test_a_fully_readable_system_names_nothing_unavailable(self):
         one = fps_counts.snapshot(ready=[], gates=[], loops=[])

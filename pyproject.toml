@@ -8,7 +8,7 @@ requires-python = ">=3.11"
 # Vendored copy of the shared strict defaults: a home path does not resolve on
 # a CI runner. The weekly audit reports it if this copy drifts from the source.
 extend = "ruff-shared.toml"
-# skills/daily-standup was adopted from team-org/skills, which lints to a
+# skills/daily-standup was adopted from the team skills repo, which lints to a
 # looser standard; it arrives with 164 findings under these rules. Holding
 # borrowed code to this config is a separate piece of work with its own bead,
 # and reshaping it inside the adoption would bury the move in style noise.

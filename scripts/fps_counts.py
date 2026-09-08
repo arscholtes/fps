@@ -69,7 +69,7 @@ def merge(snapshots):
 
 def snapshot_path(repo):
     """One snapshot per repo. Beads is per-repo, so a single shared file would
-    show a workrepo terminal the counts from fps.
+    show one repo's terminal the counts from another.
 
     @param repo [String] repo path
     @return [String] path to that repo's snapshot
