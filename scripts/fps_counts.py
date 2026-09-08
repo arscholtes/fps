@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROLES = ("forge", "pilot", "shepherd", "warden", "mentor")
-STALE_AFTER = 60.0
+STALE_AFTER = 240.0        # two measured intervals; shorter flags a healthy writer
 BD_TIMEOUT = 5.0
 SNAPSHOT_DIR = Path("~/.local/share/fps").expanduser()
 
