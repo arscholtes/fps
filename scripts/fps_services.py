@@ -286,7 +286,43 @@ def _aged_out(created_at, ttl_days):
     return datetime.now(timezone.utc) - then > timedelta(days=ttl_days)
 
 
-def cmd_notices(conn, args):
+def _unacked_rows(repo, for_role):
+    """@return [Array<sqlite3.Row>] unacked notices for a role in another tenant."""
+    try:
+        conn = fps_tenant.connect_tenant(repo)
+        sql = "SELECT * FROM notices WHERE acked_at IS NULL"
+        params = []
+        if for_role:
+            sql += " AND (for_role IS NULL OR for_role = ?)"
+            params.append(for_role)
+        return list(conn.execute(sql + " ORDER BY created_at ASC", params))
+    except Exception:
+        return []
+
+
+def _elsewhere(repo, for_role):
+    """Unacked notices in every joined repo except this one.
+
+    A notice is addressed to a role, and the role is the same person in every
+    repo. Scoping the empty case to one tenant hid a pending-work batch and
+    a P1 behind a message saying there were none. Read-only; the session binding
+    still governs every write.
+
+    @return [Array<(String, Array<sqlite3.Row>)>] repo name and its notices.
+    """
+    here = str(Path(repo).resolve()) if repo else None
+    found = []
+    for entry in fps_tenant.list_repos():
+        path = entry.get("path")
+        if not path or (here and str(Path(path).resolve()) == here):
+            continue
+        rows = _unacked_rows(path, for_role)
+        if rows:
+            found.append((Path(path).name, rows))
+    return found
+
+
+def cmd_notices(conn, args, repo=None):
     sql = "SELECT * FROM notices"
     params = []
     if not args.all:
@@ -306,7 +342,12 @@ def cmd_notices(conn, args):
 
     if not rows and not stale:
         if not args.quiet:
-            print("no notices")
+            where = Path(repo).name if repo else "this repo"
+            print(f"no notices in {where}")
+            for name, found in _elsewhere(repo, args.for_role):
+                print(f"\n  {len(found)} unread in {name}:")
+                for r in found:
+                    print(f"    [{r['id']}] {(r['created_at'] or '')[:10]}  {r['body']}")
         return 0
     for r in rows:
         target = r["for_role"] or "all"
@@ -496,7 +537,9 @@ def main():
     conn = connect(args.repo_path)
     return {
         "status": cmd_status, "problems": cmd_problems, "sessions": cmd_sessions,
-        "notify": cmd_notify, "notices": cmd_notices, "ack": cmd_ack,
+        "notify": cmd_notify,
+        "notices": lambda c, a: cmd_notices(c, a, args.repo_path),
+        "ack": cmd_ack,
     }[args.cmd](conn, args)
 
 
