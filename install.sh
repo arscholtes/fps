@@ -28,6 +28,7 @@ shim fps-learn    "$REPO_DIR/scripts/fps_learn.py"    python3
 shim fps-loops    "$REPO_DIR/scripts/fps_state.py"    python3
 shim fps-bootstrap "$REPO_DIR/scripts/fps_bootstrap.py" python3
 shim fps-tenant  "$REPO_DIR/scripts/fps_tenant.py"    python3
+shim timelog     "$REPO_DIR/skills/daily-standup/bin/timelog"
 
 mkdir -p "$(dirname "$SKILL_LINK")"
 if [ -L "$SKILL_LINK" ] || [ ! -e "$SKILL_LINK" ]; then
