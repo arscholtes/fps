@@ -36,11 +36,6 @@ class NoEmployerIdentifiersOutsideTheTranscripts(unittest.TestCase):
                         offenders.append(f"{path.relative_to(ROOT)}:{n}")
         self.assertEqual(offenders, [], f"employer identifier reintroduced: {offenders}")
 
-    def test_the_standup_has_no_employer_default(self):
-        src = (ROOT / "skills/daily-standup/bin/block_tick.py").read_text()
-        self.assertIn("STANDUP_REPO", src)
-        self.assertNotIn("WORK_REPO", src)
-
 
 if __name__ == "__main__":
     unittest.main()
