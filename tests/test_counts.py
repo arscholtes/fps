@@ -174,12 +174,17 @@ class MissingBeadsIsNotAnEmptyQueue(unittest.TestCase):
     """
 
     def test_a_repo_bd_cannot_read_raises_rather_than_reporting_nothing(self):
+        # bd's own reply in a beadsless repo, so the test needs no bd installed.
+        def beadsless(cmd, **_run_options):
+            return subprocess.CompletedProcess(cmd, 1, "", "no beads database found")
+
         with tempfile.TemporaryDirectory() as d, \
+             mock.patch.object(fps_counts.subprocess, "run", beadsless), \
              self.assertRaises(fps_counts.BeadsUnavailable) as caught:
             fps_counts._bd(d, "ready")
         # Distinguishes a non-zero exit from the missing-binary path, which
         # would otherwise satisfy this test for the wrong reason.
-        self.assertIn("exit", str(caught.exception))
+        self.assertIn("exit 1", str(caught.exception))
 
     def test_a_beadsless_repo_is_marked_unavailable_not_quiet(self):
         with tempfile.TemporaryDirectory() as d:
