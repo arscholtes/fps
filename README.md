@@ -74,6 +74,9 @@ that already exists.
 
 Optional per-repo settings go in `~/.fps/config/<slug>.json` (`pilot_dir`, `ports`),
 kept outside the target repo so an app repo that ships to a team stays clean.
+With no ports set, warden expects only the ports the repo itself names: published
+ports in its compose file, postgres when `config/database.yml` uses it, and local
+postgres or redis URLs in its env files.
 
 ```bash
 export FPS_REPO=~/code/your-app        # a default when you are not inside the repo

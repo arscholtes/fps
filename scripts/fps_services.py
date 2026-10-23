@@ -35,8 +35,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fps_tenant
 
 SESSION_DIR = Path("~/.claude/sessions").expanduser()
-# Ports the stack is expected to answer on. Override with FPS_PORTS="5432:postgres,..."
-DEFAULT_PORTS = "5432:postgres,6379:redis,1025:smtp-sink,8025:mail-ui"
+# Docker's own lookup order; the first file found is the one compose uses.
+COMPOSE_FILES = ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
+ENV_FILES = (".env", ".env.local", ".env.development", ".env.example")
+POSTGRES_DEFAULT_PORT = "5432"
+URL_DEFAULT_PORTS = {"postgres": POSTGRES_DEFAULT_PORT, "redis": "6379"}
+LOCAL_URL = re.compile(r"\b(postgres|redis)(?:ql)?://(?:[^@\s/]*@)?(?:localhost|127\.0\.0\.1|\[::1\])(?::(\d+))?")
 LOG_SCAN_BYTES = 200_000
 ROLES = ("forge", "pilot", "shepherd", "warden", "mentor")
 
@@ -136,8 +140,33 @@ def listening(port):
     return code == 0
 
 
-def expected_ports():
-    spec = os.environ.get("FPS_PORTS", DEFAULT_PORTS)
+def expected_ports(repo):
+    """Ports something in the bound repo needs, so a port only counts as down when it is needed.
+
+    Read from the repo's compose file (published ports, labelled by service), a postgres
+    config/database.yml, and local postgres or redis URLs in its env files. Hosted databases
+    are not local ports. FPS_PORTS="5432:postgres,..." overrides all of these; set empty, it means none.
+
+    @param repo [String, nil] path of the bound repo
+    @return [Array<(String, String)>] (port, label) pairs, each port once
+    """
+    spec = os.environ.get("FPS_PORTS")
+    if spec is not None:
+        pairs = _ports_from_spec(spec)
+    elif repo:
+        pairs = _compose_ports(Path(repo)) + _database_ports(Path(repo)) + _env_url_ports(Path(repo))
+    else:
+        pairs = []
+    seen = set()
+    out = []
+    for port, label in pairs:
+        if port not in seen:
+            seen.add(port)
+            out.append((port, label))
+    return out
+
+
+def _ports_from_spec(spec):
     out = []
     for raw_chunk in spec.split(","):
         chunk = raw_chunk.strip()
@@ -146,6 +175,76 @@ def expected_ports():
         port, _, label = chunk.partition(":")
         out.append((port.strip(), label.strip() or port.strip()))
     return out
+
+
+def _compose_ports(repo):
+    """Host ports published under services:, from the short ("5432:5432") and long (published:) forms.
+
+    A line reader rather than a YAML parser, because the scripts promise a stock python.
+    """
+    path = next((repo / name for name in COMPOSE_FILES if (repo / name).is_file()), None)
+    if path is None:
+        return []
+    out = []
+    in_services = False
+    service_indent = service = ports_indent = None
+    for line in path.read_text().splitlines():
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent == 0:
+            in_services = text.startswith("services:")
+            service_indent = service = ports_indent = None
+            continue
+        if not in_services:
+            continue
+        if service_indent is None or indent <= service_indent:
+            service_indent = indent
+            service = text.rstrip(":").strip()
+            ports_indent = None
+        elif text.startswith("ports:"):
+            ports_indent = indent
+        elif ports_indent is not None and indent > ports_indent:
+            port = _published_port(text)
+            if port:
+                out.append((port, service))
+        else:
+            ports_indent = None
+    return out
+
+
+def _published_port(entry):
+    """The host port in one ports: entry, or None when docker picks the host port."""
+    text = entry.lstrip("- ").strip()
+    if text.startswith("published:"):
+        value = text.partition(":")[2].strip().strip("'\"")
+        return value if value.isdigit() else None
+    parts = text.strip("'\"").split("/")[0].split(":")
+    return parts[-2] if len(parts) >= 2 and parts[-2].isdigit() else None
+
+
+def _env_url_ports(repo):
+    """Ports of postgres and redis URLs on this machine, from the repo's env files. Values are never printed."""
+    out = []
+    for name in ENV_FILES:
+        path = repo / name
+        if path.is_file():
+            for m in LOCAL_URL.finditer(path.read_text()):
+                out.append((m.group(2) or URL_DEFAULT_PORTS[m.group(1)], m.group(1)))
+    return out
+
+
+def _database_ports(repo):
+    """Postgres's port when config/database.yml uses it: its port: line, else the default."""
+    path = repo / "config" / "database.yml"
+    if not path.is_file():
+        return []
+    text = path.read_text()
+    if not re.search(r"^\s*adapter:\s*[\"']?postgres", text, re.M):
+        return []
+    m = re.search(r"^\s*port:\s*[\"']?(\d+)", text, re.M)
+    return [(m.group(1) if m else POSTGRES_DEFAULT_PORT, "postgres")]
 
 
 # --------------------------------------------------------------------------- sessions
@@ -382,7 +481,7 @@ def cmd_status(_conn, args):
             print(f"  {name:<28} {status}")
 
     print("\nports")
-    for port, label in expected_ports():
+    for port, label in expected_ports(args.repo_path):
         print(f"  {port:<6} {label:<12} {'listening' if listening(port) else 'DOWN'}")
 
     print("\napp processes")
@@ -408,9 +507,9 @@ def _container_problems():
             if "unhealthy" in status.lower() or "restarting" in status.lower()]
 
 
-def _port_problems():
+def _port_problems(repo):
     return [("error", f"{label} is not listening on {port}")
-            for port, label in expected_ports() if not listening(port)]
+            for port, label in expected_ports(repo) if not listening(port)]
 
 
 def _port_conflict_problems(procs):
@@ -455,7 +554,7 @@ def _log_problems(repo):
 def find_problems(repo):
     """Only things observed, never inferred. Each entry is (severity, text)."""
     procs = app_processes(repo)
-    return (_container_problems() + _port_problems()
+    return (_container_problems() + _port_problems(repo)
             + _port_conflict_problems(procs) + _sidekiq_problems(procs)
             + _log_problems(repo))
 
