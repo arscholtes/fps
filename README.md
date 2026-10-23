@@ -2,7 +2,8 @@
 
 Five Claude Code sessions open at once, each with a fixed job and an explicit list of
 things it does not do. Full documentation, design rationale, and the command reference
-live in [SKILL.md](SKILL.md) — this file is just setup.
+live in [SKILL.md](SKILL.md) — this file is just setup. A one-page tour of the five roles
+and their charters is at [arscholtes.github.io/fps](https://arscholtes.github.io/fps/).
 
 | | forge 🟢 | pilot 🔵 | shepherd 🔴 | warden 🟣 | mentor 🩵 |
 |---|---|---|---|---|---|
@@ -14,19 +15,27 @@ live in [SKILL.md](SKILL.md) — this file is just setup.
 
 - macOS (tab colouring and `fps code`/`fps mine` assume it; iTerm2 for the tab launcher)
 - Claude Code CLI
-- Python 3 (ships with macOS)
+- Python 3.11 or newer (the Python that ships with macOS is 3.9, which is too old)
 
 ## Install
 
 ```bash
-git clone <this-repo> ~/Developer/fps
+git clone https://github.com/arscholtes/fps.git ~/Developer/fps
 ~/Developer/fps/install.sh
 ```
 
-The installer writes four thin shims into `~/.local/bin` (`fps`, `fps-services`,
-`fps-learn`, `fps-loops`) pointing at this clone, and symlinks the repo into
-`~/.claude/skills/fps` so Claude Code picks it up as a skill. Make sure
-`~/.local/bin` is on your `PATH`.
+The installer writes six thin shims into `~/.local/bin` (`fps`, `fps-services`,
+`fps-learn`, `fps-loops`, `fps-bootstrap`, `fps-tenant`) pointing at this clone, and
+symlinks the repo into `~/.claude/skills/fps` so Claude Code picks it up as a skill.
+Make sure `~/.local/bin` is on your `PATH`.
+
+## Test
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Standard library only; CI runs this on Python 3.11, 3.13 and 3.14.
 
 ## Which repo
 
