@@ -72,6 +72,8 @@ def age_days(iso):
 
 
 def connect(db):
+    # A fresh install has no data folder yet, and sqlite will not create one.
+    Path(db).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
     conn.execute(
