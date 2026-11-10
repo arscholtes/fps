@@ -221,7 +221,7 @@ def _published_port(entry):
         value = text.partition(":")[2].strip().strip("'\"")
         return value if value.isdigit() else None
     parts = text.strip("'\"").split("/")[0].split(":")
-    return parts[-2] if len(parts) >= 2 and parts[-2].isdigit() else None
+    return parts[-2] if len(parts) > 1 and parts[-2].isdigit() else None
 
 
 def _env_url_ports(repo):
